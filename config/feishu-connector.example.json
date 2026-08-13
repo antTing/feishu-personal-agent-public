@@ -1,0 +1,36 @@
+{
+  "feishu": {
+    "appId": "replace-with-feishu-app-id",
+    "appSecret": "replace-with-app-secret",
+    "allowedUserIds": ["replace-with-owner-open-id"],
+    "allowedBotIds": [],
+    "allowedBotChatIds": [],
+    "allowGroupMessages": true
+  },
+  "bridge": {
+    "url": "ws://127.0.0.1:9810/bridge/ws",
+    "token": "replace-with-the-same-random-secret-as-cc-connect",
+    "platform": "feishu-self-built-app",
+    "project": "personal-agent"
+  },
+  "workspaces": {
+    "statePath": "/absolute/path/to/runtime/feishu-connector/workspaces.json",
+    "ccConfigPath": "/absolute/path/to/runtime/cc-connect/config.toml",
+    "managedRoot": "/absolute/path/to/dedicated-managed-workspaces",
+    "searchRoots": ["/absolute/safe/search/root"],
+    "managementUrl": "http://127.0.0.1:9820",
+    "managementToken": "replace-with-the-cc-connect-management-token",
+    "approved": [
+      {
+        "name": "approved-workspace",
+        "aliases": ["approved-workspace"],
+        "path": "/absolute/path/to/approved-workspace",
+        "readProject": "workspace-approved-read",
+        "devProject": "workspace-approved-dev"
+      }
+    ]
+  },
+  "permissions": {
+    "statePath": "/absolute/path/to/runtime/feishu-connector/permissions.json"
+  }
+}
