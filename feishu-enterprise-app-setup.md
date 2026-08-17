@@ -15,7 +15,7 @@ Aily（可选） -> 执行群 -> 飞书企业自建应用机器人
 新安装运行：
 
 ```bash
-./scripts/onboard-native.sh --workspace '/绝对路径/到/工作区'
+./scripts/onboard-native.sh --initial-workspace '/绝对路径/到/初始目录'
 ```
 
 脚本调用[飞书官方一键建应用能力](https://open.feishu.cn/document/mcp_open_tools/integrating-agents-with-feishu/scan-to-create-an-app-in-one-click-nodejs)，保留官方 `PersonalAgent` 基座，并在确认页增量声明本项目需要的权限、`im.message.receive_v1` 和 `card.action.trigger`。用户只需在浏览器确认；App ID、App Secret 和扫码用户 `open_id` 由官方注册结果直接返回，不需要复制。

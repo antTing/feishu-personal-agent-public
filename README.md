@@ -28,7 +28,7 @@ Aily（可选）
   -> 执行群中的 @ 本地机器人
   -> cc-connect 官方 Feishu WebSocket
   -> Codex CLI / App Server
-  -> 已授权工作区
+  -> 主人当前选择的本地目录
 ```
 
 原生模式直接使用 cc-connect 已有的飞书消息、引用回复、思考/工具进度、图片/普通文件、线程会话和停止能力，不再重复实现一套飞书 Connector。旧版 `Feishu Connector -> Bridge` 仍保留在仓库中，用于兼容现有部署和迁移过渡，不建议新安装继续采用它。
@@ -55,7 +55,7 @@ Aily 应为每条独立任务链生成 `DS-XXXXXXXX`，为链中的每个具体�
 - 已登录的 Codex CLI；
 - 一个可以创建企业自建应用的飞书账号；
 - 一个准备作为执行群的飞书群；
-- 一个明确的本地工作区路径。
+- 一个用于首次启动的本地目录。它不是永久授权上限，之后主人可用 cc-connect 原生 `/dir` 切换；目录可以有 Git，也可以没有。
 - 若要使用 Aily 多任务调度：还需要 Aily 侧可持久化 `DS/T` 映射、FIFO 和任务状态；本仓库只提供协议与提示词模板。
 
 App、机器人、权限、App Secret 及用户/机器人/群 ID 均由安装器自动创建、申请或从一次性配对事件取得，不需要手工查找和复制。用户只处理飞书官方授权、企业管理员审批、加群和配对确认。
@@ -65,7 +65,7 @@ App、机器人、权限、App Secret 及用户/机器人/群 ID 均由安装器
 把下面一句话交给 Codex、Claude Code 或其他有本机终端权限的 Agent：
 
 ```text
-请阅读 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md，按原生 cc-connect 模式帮我安装；先列出依赖和拟执行命令，询问我工作区路径以及是否使用 Aily，然后按默认参数运行自动建应用和配对流程，不要使用显示一次性链接、配对码或恢复私有锁的选项。浏览器授权、企业审批、执行群/Aily 配对和主人最终确认由我处理；不要读取或回显私有配置、ID、Secret、一次性授权链接和配对码，完成后运行测试和 release-check。
+请阅读 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md，按原生 cc-connect 模式帮我安装；先列出依赖和拟执行命令，询问我初始工作目录以及是否使用 Aily，然后按默认参数运行自动建应用和配对流程，不要使用显示一次性链接、配对码或恢复私有锁的选项。浏览器授权、企业审批、执行群/Aily 配对和主人最终确认由我处理；不要读取或回显私有配置、ID、Secret、一次性授权链接和配对码，完成后运行测试和 release-check。
 ```
 
 Agent 可以检查依赖、构建、启动自动安装器和运行测试。你只需确认浏览器授权、必要的企业审批、把机器人加入执行群，并按本机浏览器配对页完成执行群选择、Aily 报到和主人最终确认；不需要向 Agent 提供任何飞书 ID、Secret 或配对码。
@@ -74,13 +74,15 @@ Agent 可以检查依赖、构建、启动自动安装器和运行测试。你�
 
 ```bash
 ./scripts/build-cc-connect-local.sh
-./scripts/onboard-native.sh --workspace '/绝对路径/到/工作区'
+./scripts/onboard-native.sh --initial-workspace '/绝对路径/到/初始目录'
 ./scripts/start-native.sh
 ```
 
 `start-native.sh` 会优先复用当前终端中的 Codex CLI；macOS 上找不到时，会自动发现 ChatGPT/Codex 桌面应用内置的 Codex 执行器，不需要重复安装。
 
 `start-native.sh` 是当前经过验证的启动入口。`v0.2` 暂未提供经过验证的一键 launchd/systemd 安装器；不要直接绕过该脚本启动 cc-connect，因为它还负责发现 Codex 执行器。不要把原生模式和旧模式同时连接到同一个飞书应用。
+
+早期固定工作区配置升级到主人专属原生 `/dir` 时，停止服务并重新构建后执行一次 `./scripts/onboard-native.sh --upgrade-workspace-policy`。新安装无需执行。
 
 ## 飞书权限
 
@@ -96,17 +98,16 @@ Agent 可以检查依赖、构建、启动自动安装器和运行测试。你�
 - 飞书引用回复；群内处理中提示、工具进度和完成反馈会同时 `@` 原任务发送者，使 Aily 或主人能收到对应事件；
 - 按回复线程隔离会话；
 - 同一 `DS` 由 Aily 串行派发、不同 `DS` 线程并行；
-- `/stop`、`/help`、`/version` 和工具权限确认；任务状态由线程内进度和 Aily 的 `DS/T` 状态映射提供；
+- `/stop`、`/help`、`/version` 和工具权限确认；主人还可用原生 `/dir` 选择下一会话的目录；
 - 工具审批卡片和文字审批只允许 `approval_from` 中的主人操作，并禁用跨任务延续的“允许全部”；
-- 固定工作区中的 Codex CLI/App Server 执行。
+- 在主人当前选择的目录中运行 Codex CLI/App Server；安装参数只设置初始目录，不限制后续目录数量。
 
 仍由 Aily 或后续策略补丁负责：
 
 - `DS/T` 编号到原始用户会话的映射；
-- 未知工作区的申请、查找和批准；
-- 只读/开发工作区的登记及 Git 分支门禁；
+- Aily 自己维护的工作区别名、读写策略及 Git 分支门禁；
 - 从任意线程按 `T-...` 精确停止；
-- 自动根据任务封装切换 cc-connect project、工作目录或权限模式。
+- 自动根据任务封装切换 cc-connect project、目录或权限模式。目录切换只能由主人显式执行原生 `/dir`；Aily 不能代切。
 
 这些边界会在原生模式验收通过后逐项补齐；当前不要把旧 Connector 文档里的能力误认为原生模式已经全部具备。
 

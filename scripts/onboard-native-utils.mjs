@@ -57,6 +57,83 @@ export function nativeConfigMatchesPending(configText, pending) {
   ].every((line) => configText.split("\n").includes(line));
 }
 
+export function upgradeNativeWorkspacePolicy(configText) {
+  if (typeof configText !== "string" || !configText.trim()) {
+    throw new Error("native config is empty or invalid");
+  }
+  const hadFinalNewline = configText.endsWith("\n");
+  const lines = configText.split("\n");
+  if (hadFinalNewline) lines.pop();
+
+  const projectStart = lines.findIndex((line) => line.trim() === "[[projects]]");
+  const platformStart = lines.findIndex((line) => line.trim() === "[[projects.platforms]]");
+  const platformOptions = lines.findIndex(
+    (line, index) => index > platformStart && line.trim() === "[projects.platforms.options]"
+  );
+  if (projectStart < 0 || platformStart <= projectStart || platformOptions <= platformStart) {
+    throw new Error("native config layout is not supported for automatic policy migration");
+  }
+
+  const projectAdminLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => index > projectStart && index < platformStart && /^\s*admin_from\s*=/.test(line));
+  if (projectAdminLines.length !== 1) {
+    throw new Error("native config must contain exactly one project admin policy");
+  }
+  const adminMatch = projectAdminLines[0].line.match(/^\s*admin_from\s*=\s*("(?:\\.|[^"\\])*")\s*$/);
+  if (!adminMatch) throw new Error("native project admin policy is invalid");
+  const ownerId = JSON.parse(adminMatch[1]);
+  if (typeof ownerId !== "string" || !/^ou_[A-Za-z0-9]+$/.test(ownerId)) {
+    throw new Error("native project admin policy is invalid");
+  }
+
+  const nextSection = lines.findIndex(
+    (line, index) => index > platformOptions && /^\s*\[/.test(line)
+  );
+  const platformEnd = nextSection < 0 ? lines.length : nextSection;
+  const platformAdminLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => index > platformOptions && index < platformEnd && /^\s*admin_from\s*=/.test(line));
+  if (platformAdminLines.length > 1) {
+    throw new Error("native platform admin policy is ambiguous");
+  }
+  if (platformAdminLines.length === 1) {
+    const platformMatch = platformAdminLines[0].line.match(/^\s*admin_from\s*=\s*("(?:\\.|[^"\\])*")\s*$/);
+    if (!platformMatch || JSON.parse(platformMatch[1]) !== ownerId) {
+      throw new Error("native project and platform admin policies do not match");
+    }
+  } else {
+    const approvalIndex = lines.findIndex(
+      (line, index) => index > platformOptions && index < platformEnd && /^\s*approval_from\s*=/.test(line)
+    );
+    const insertAt = approvalIndex > platformOptions ? approvalIndex : platformOptions + 1;
+    lines.splice(insertAt, 0, `admin_from = ${JSON.stringify(ownerId)}`);
+  }
+
+  const disabledLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => index > projectStart && index < platformStart && /^\s*disabled_commands\s*=/.test(line));
+  if (disabledLines.length !== 1) {
+    throw new Error("native config must contain exactly one disabled command policy");
+  }
+  const disabledMatch = disabledLines[0].line.match(/^(\s*)disabled_commands\s*=\s*(\[.*\])\s*$/);
+  if (!disabledMatch) throw new Error("native disabled command policy is invalid");
+  let disabled;
+  try {
+    disabled = JSON.parse(disabledMatch[2]);
+  } catch {
+    throw new Error("native disabled command policy is invalid");
+  }
+  if (!Array.isArray(disabled) || disabled.some((command) => typeof command !== "string")) {
+    throw new Error("native disabled command policy is invalid");
+  }
+  const nextDisabled = disabled.filter((command) => !["dir", "workspace"].includes(command));
+  lines[disabledLines[0].index] = `${disabledMatch[1]}disabled_commands = ${JSON.stringify(nextDisabled)}`;
+
+  const content = `${lines.join("\n")}${hadFinalNewline ? "\n" : ""}`;
+  return { content, changed: content !== configText };
+}
+
 export function sanitizeDiagnostic(error, sensitiveValues = []) {
   let message = sourceDiagnostic(error)
     .replace(ANSI_ESCAPE, "")

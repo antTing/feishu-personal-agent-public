@@ -1,5 +1,5 @@
 # 旧兼容模式默认 Agent 工作区
 
-这是旧 Connector/Bridge 兼容模式使用的默认受控目录。原生模式不会自动使用这里，而是使用 `onboard-native.sh --workspace` 明确指定的外部工作区。
+这是旧 Connector/Bridge 兼容模式使用的默认受控目录。原生模式不会自动使用这里，而是用 `onboard-native.sh --initial-workspace` 指定第一次会话的目录；之后主人可通过原生 `/dir` 切换。
 
 只在这里放置明确允许 Agent 访问的脚本、文档或只读数据入口。不要放置 SSH 私钥、云厂商密钥、生产数据库凭据，也不要创建指向个人主目录或其他敏感位置的软链接。

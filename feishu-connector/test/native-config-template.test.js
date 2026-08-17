@@ -39,11 +39,15 @@ test("renders a direct native Feishu configuration without Bridge or Management"
   assert.match(disabledLine, /"mode"/);
   assert.match(disabledLine, /"provider"/);
   assert.match(disabledLine, /"history"/);
-  assert.match(disabledLine, /"workspace"/);
+  assert.doesNotMatch(disabledLine, /"dir"|"workspace"/);
   assert.match(disabledLine, /"status"/);
   assert.match(disabledLine, /"usage"/);
   assert.match(disabledLine, /"cancel"/);
   assert.doesNotMatch(disabledLine, /"stop"|"help"|"version"/);
+  assert.equal(
+    config.split("\n").filter((line) => line === `admin_from = ${JSON.stringify(OWNER_ID)}`).length,
+    2
+  );
   assert.doesNotMatch(config, /\[bridge\]|\[management\]/i);
 });
 

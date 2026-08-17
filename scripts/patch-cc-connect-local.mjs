@@ -259,6 +259,29 @@ func (e *Engine) hasPermissionApprovalPolicy() bool {
 );
 
 await replaceExact(
+  "core/engine.go",
+  `var privilegedCommands = map[string]bool{
+\t"shell":   true,
+\t"show":    true,
+\t"dir":     true,
+\t"restart": true,
+\t"upgrade": true,
+\t"web":     true,
+\t"diff":    true,
+}`,
+  `var privilegedCommands = map[string]bool{
+\t"shell":     true,
+\t"show":      true,
+\t"dir":       true,
+\t"workspace": true,
+\t"restart":   true,
+\t"upgrade":   true,
+\t"web":       true,
+\t"diff":      true,
+}`
+);
+
+await replaceExact(
   "cmd/cc-connect/main.go",
   `\t\t// Wire admin allowlist for privileged commands
 \t\tengine.SetAdminFrom(proj.AdminFrom)
@@ -478,6 +501,7 @@ await replaceExact(
   `\tallowFrom                  string
 \tallowChat                  string`,
   `\tallowFrom                  string
+\tadminFrom                  string
 \tapprovalFrom               string
 \tallowChat                  string`
 );
@@ -510,8 +534,39 @@ func (p *Platform) isCardActorAllowed(userID string) bool {
 \treturn core.AllowList(p.allowFrom, userID)
 }
 
+func (p *Platform) isAdminCardActorAllowed(userID string) bool {
+\treturn p.isCardActorAllowed(userID) && core.AllowList(p.adminFrom, userID)
+}
+
 func (p *Platform) isPermissionActorAllowed(userID string) bool {
 \treturn p.isCardActorAllowed(userID) && core.AllowList(p.approvalFrom, userID)
+}
+
+func cardActionCommandID(action string) string {
+\taction = strings.TrimSpace(action)
+\tfor _, prefix := range []string{"nav:", "act:"} {
+\t\tif strings.HasPrefix(action, prefix) {
+\t\t\taction = strings.TrimSpace(strings.TrimPrefix(action, prefix))
+\t\t\tbreak
+\t\t}
+\t}
+\tif i := strings.IndexByte(action, ' '); i >= 0 {
+\t\taction = action[:i]
+\t}
+\taction = strings.TrimPrefix(action, "/")
+\tif i := strings.IndexByte(action, '/'); i >= 0 {
+\t\taction = action[:i]
+\t}
+\treturn strings.ToLower(strings.TrimSpace(action))
+}
+
+func (p *Platform) isPrivilegedCardActionAllowed(action, userID string) bool {
+\tswitch cardActionCommandID(action) {
+\tcase "dir", "workspace":
+\t\treturn p.isAdminCardActorAllowed(userID)
+\tdefault:
+\t\treturn true
+\t}
 }
 
 func (p *Platform) allowsPersistentToolApproval() bool {
@@ -605,6 +660,7 @@ await replaceExact(
 \tallowChat, _ := opts["allow_chat"].(string)`,
   `\tallowFrom, _ := opts["allow_from"].(string)
 \tcore.CheckAllowFrom(name, allowFrom)
+\tadminFrom, _ := opts["admin_from"].(string)
 \tapprovalFrom, _ := opts["approval_from"].(string)
 \tallowChat, _ := opts["allow_chat"].(string)`
 );
@@ -623,6 +679,7 @@ await replaceExact(
   `\t\tallowFrom:                  allowFrom,
 \t\tallowChat:                  allowChat,`,
   `\t\tallowFrom:                  allowFrom,
+\t\tadminFrom:                  adminFrom,
 \t\tapprovalFrom:               approvalFrom,
 \t\tallowChat:                  allowChat,`
 );
@@ -663,6 +720,11 @@ await replaceExact(
   `\tsessionKey := p.sessionKeyFromCardAction(chatID, userID, event.Event.Action.Value)
 \tactorName := p.resolveUserName(userID)
 \tactorIsGroup := strings.HasPrefix(chatID, "oc_")
+	if !p.isPrivilegedCardActionAllowed(actionVal, userID) {
+		return &callback.CardActionTriggerResponse{Toast: &callback.Toast{
+			Type: "error", Content: "只有主人可以切换工作目录 / Owner workspace control required",
+		}}, nil
+	}
 
 \t// nav: / act: — synchronous card update`
 );
@@ -1277,7 +1339,7 @@ await writeNew(
 import "testing"
 
 func TestLocalPatchCardAndPermissionActors(t *testing.T) {
-\tp := &Platform{allowFrom: "owner-user,source-bot", approvalFrom: "owner-user"}
+\tp := &Platform{allowFrom: "owner-user,source-bot", adminFrom: "owner-user", approvalFrom: "owner-user"}
 \tif !p.isCardActorAllowed("source-bot") {
 \t\tt.Fatal("configured source bot should be able to use ordinary card controls")
 \t}
@@ -1290,6 +1352,18 @@ func TestLocalPatchCardAndPermissionActors(t *testing.T) {
 \tif !p.isPermissionActorAllowed("owner-user") {
 \t\tt.Fatal("configured owner should be able to handle tool approval")
 \t}
+	if p.isPrivilegedCardActionAllowed("nav:/dir", "source-bot") {
+	\tt.Fatal("source bot must not navigate privileged work directory controls")
+	}
+	if p.isPrivilegedCardActionAllowed("act:/workspace bind example", "source-bot") {
+	\tt.Fatal("source bot must not operate multi-workspace controls")
+	}
+	if !p.isPrivilegedCardActionAllowed("nav:/dir", "owner-user") {
+	\tt.Fatal("configured owner should be able to navigate work directory controls")
+	}
+	if !p.isPrivilegedCardActionAllowed("nav:/help", "source-bot") {
+	\tt.Fatal("ordinary card controls should remain available to allowed source bots")
+	}
 \tif p.allowsPersistentToolApproval() {
 \t\tt.Fatal("configured approval policy must disable persistent approval")
 \t}
@@ -1855,12 +1929,11 @@ import (
 
 func TestLocalPatchCardNavigationRespectsDisabledCommands(t *testing.T) {
 \te := newTestEngine()
-\te.SetDisabledCommands([]string{"mode", "model", "dir", "provider"})
+\te.SetDisabledCommands([]string{"mode", "model", "provider"})
 
 \tblocked := map[string]string{
 \t\t"act:/mode yolo":      "mode",
 \t\t"act:/model switch 1": "model",
-\t\t"nav:/dir":            "dir",
 \t\t"nav:/provider/add":   "provider",
 \t}
 \tfor action, cmdID := range blocked {
@@ -1891,6 +1964,20 @@ func TestLocalPatchCardNavigationRespectsDisabledCommands(t *testing.T) {
 \t}
 \tif strings.Contains(stopText, sessionKey) {
 \t\tt.Fatalf("stop confirmation leaked the session key: %q", stopText)
+\t}
+}
+
+func TestLocalPatchWorkspaceCommandsRequireAdmin(t *testing.T) {
+\tif !privilegedCommands["dir"] || !privilegedCommands["workspace"] {
+\t\tt.Fatal("dir and workspace commands must both require admin_from")
+\t}
+\te := newTestEngine()
+\te.SetAdminFrom("owner-user")
+\tif !e.isAdmin("owner-user") {
+\t\tt.Fatal("configured owner should be recognized as workspace admin")
+\t}
+\tif e.isAdmin("source-bot") {
+\t\tt.Fatal("source bot must not inherit workspace admin permission")
 \t}
 }
 

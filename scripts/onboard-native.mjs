@@ -23,7 +23,8 @@ import { renderNativeConfig } from "../native/config-template.mjs";
 import {
   atomicPrivateWrite,
   nativeConfigMatchesPending,
-  sanitizeDiagnostic
+  sanitizeDiagnostic,
+  upgradeNativeWorkspacePolicy
 } from "./onboard-native-utils.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -54,15 +55,19 @@ for (const [signal, exitCode] of [["SIGINT", 130], ["SIGTERM", 143]]) {
 
 function usage() {
   console.log(`用法：
-  ./scripts/onboard-native.sh --workspace /绝对路径/到/工作区
+  ./scripts/onboard-native.sh --initial-workspace /绝对路径/到/初始工作区
 
 选项：
+  --initial-workspace     Codex 第一次会话的工作目录；主人之后可用 /dir 切换
+  --workspace             --initial-workspace 的兼容别名
   --without-dispatcher     不配对 Aily，只允许主人直接使用
   --app-name <名称>        设置创建的飞书应用名称
   --timeout-minutes <分钟> 本次等待配对的时间，默认 20
   --no-open                不自动打开浏览器；必须同时使用 --show-pairing-codes
   --show-pairing-codes     在终端显示配对码；只限本人独立终端
   --recover-lock           仅在确认没有安装器运行时恢复意外中断留下的锁
+  --upgrade-workspace-policy
+                           将旧安装迁移为主人专属的原生 /dir 与 /workspace
   --help                   显示帮助
 
 App ID、App Secret、主人 ID、群 ID 和 Aily 机器人 ID 都会自动取得，
@@ -71,13 +76,14 @@ App ID、App Secret、主人 ID、群 ID 和 Aily 机器人 ID 都会自动取�
 
 function parseArgs(argv) {
   const result = {
-    workspace: process.env.WORKSPACE_PATH || "",
+    workspace: process.env.INITIAL_WORKSPACE_PATH || process.env.WORKSPACE_PATH || "",
     requireDispatcher: true,
     appName: "本地个人 Agent",
     timeoutMs: 20 * 60_000,
     openBrowser: true,
     showPairingCodes: false,
-    recoverLock: false
+    recoverLock: false,
+    upgradeWorkspacePolicy: false
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -86,11 +92,12 @@ function parseArgs(argv) {
     else if (arg === "--no-open") result.openBrowser = false;
     else if (arg === "--show-pairing-codes") result.showPairingCodes = true;
     else if (arg === "--recover-lock") result.recoverLock = true;
-    else if (["--workspace", "--app-name", "--timeout-minutes"].includes(arg)) {
+    else if (arg === "--upgrade-workspace-policy") result.upgradeWorkspacePolicy = true;
+    else if (["--initial-workspace", "--workspace", "--app-name", "--timeout-minutes"].includes(arg)) {
       const value = argv[index + 1];
       if (!value) throw new Error(`${arg} requires a value`);
       index += 1;
-      if (arg === "--workspace") result.workspace = value;
+      if (arg === "--initial-workspace" || arg === "--workspace") result.workspace = value;
       if (arg === "--app-name") result.appName = value;
       if (arg === "--timeout-minutes") {
         const minutes = Number(value);
@@ -101,7 +108,7 @@ function parseArgs(argv) {
       }
     } else if (!arg.startsWith("--")) {
       throw new Error(`Unexpected argument: ${arg}`);
-    } else if (!["--without-dispatcher", "--no-open", "--show-pairing-codes", "--recover-lock"].includes(arg)) {
+    } else if (!["--without-dispatcher", "--no-open", "--show-pairing-codes", "--recover-lock", "--upgrade-workspace-policy"].includes(arg)) {
       throw new Error(`Unknown option: ${arg}`);
     }
   }
@@ -118,19 +125,19 @@ function isInside(candidate, root) {
 
 async function validateWorkspace(value) {
   if (!value || !path.isAbsolute(value)) {
-    throw new Error("--workspace must be an absolute path");
+    throw new Error("--initial-workspace must be an absolute path");
   }
   const metadata = await lstat(value);
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
-    throw new Error("--workspace must be a real directory");
+    throw new Error("--initial-workspace must be a real directory");
   }
   const workspace = await realpath(value);
   const home = path.resolve(os.homedir());
   if (workspace === path.parse(workspace).root || workspace === home) {
-    throw new Error("--workspace must not be a filesystem or home root");
+    throw new Error("--initial-workspace must not be a filesystem or home root");
   }
   if (isInside(workspace, ROOT_DIR) || isInside(ROOT_DIR, workspace)) {
-    throw new Error("--workspace must not expose the installation or private runtime tree");
+    throw new Error("--initial-workspace must not expose the installation or private runtime tree");
   }
   return workspace;
 }
@@ -350,6 +357,15 @@ async function main() {
   await acquireLock({ recover: options.recoverLock });
   if (await pathExists(CONFIG_PATH)) {
     await assertPrivateFile(CONFIG_PATH);
+    if (options.upgradeWorkspacePolicy) {
+      const existingConfig = await readFile(CONFIG_PATH, "utf8");
+      const upgraded = upgradeNativeWorkspacePolicy(existingConfig);
+      if (upgraded.changed) await atomicPrivateWrite(CONFIG_PATH, upgraded.content);
+      console.log(upgraded.changed
+        ? "已迁移工作目录策略：只有主人可使用原生 /dir 与 /workspace。未显示任何私有值。"
+        : "当前工作目录策略已经是最新版本，无需修改。未显示任何私有值。");
+      return;
+    }
     const existingPending = await loadPending();
     if (existingPending) {
       if (options.workspace) {
@@ -366,6 +382,10 @@ async function main() {
       }
     }
     throw new Error("Native configuration already exists; onboarding will not overwrite it");
+  }
+
+  if (options.upgradeWorkspacePolicy) {
+    throw new Error("Native configuration does not exist; complete onboarding first");
   }
 
   let pending = await loadPending();
@@ -464,7 +484,8 @@ async function main() {
   console.log(pending.requireDispatcher
     ? "\n自动安装与配对完成：应用凭据、主人、执行群和调度机器人均已写入严格白名单。"
     : "\n自动安装与配对完成：应用凭据、主人和执行群均已写入严格白名单。");
-  console.log("媒体会暂存在目标工作区的 .cc-connect/；若工作区受版本控制，请由主人将它加入该项目自己的忽略规则。");
+  console.log("媒体会暂存在当前工作目录的 .cc-connect/；若目录受版本控制，请由主人将它加入该项目自己的忽略规则。");
+  console.log("安装参数只设置初始工作目录；主人之后可在飞书使用 /dir 切换，Aily 无权切换目录。");
   console.log("下一步运行 ./scripts/start-native.sh 做前台验证。");
 }
 

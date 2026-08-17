@@ -81,13 +81,20 @@ const ownerId = required("FEISHU_OWNER_OPEN_ID");
 const dispatcherId = optional("FEISHU_DISPATCH_BOT_OPEN_ID");
 const executionChatId = required("FEISHU_EXECUTION_CHAT_ID");
 validateFeishuIdentityValues({ appId, ownerId, dispatcherId, executionChatId });
-const workspace = await realDirectory(absolute("WORKSPACE_PATH", required("WORKSPACE_PATH")), "WORKSPACE_PATH");
+const initialWorkspaceValue = optional("INITIAL_WORKSPACE_PATH") || optional("WORKSPACE_PATH");
+if (!initialWorkspaceValue) {
+  throw new Error("INITIAL_WORKSPACE_PATH is required");
+}
+const workspace = await realDirectory(
+  absolute("INITIAL_WORKSPACE_PATH", initialWorkspaceValue),
+  "INITIAL_WORKSPACE_PATH"
+);
 const home = path.resolve(os.homedir());
 if (workspace === path.parse(workspace).root || workspace === home) {
-  throw new Error("WORKSPACE_PATH must not be a filesystem or home root");
+  throw new Error("INITIAL_WORKSPACE_PATH must not be a filesystem or home root");
 }
 if (isInside(workspace, ROOT_DIR) || isInside(ROOT_DIR, workspace)) {
-  throw new Error("WORKSPACE_PATH must not expose the installation or private runtime tree");
+  throw new Error("INITIAL_WORKSPACE_PATH must not expose the installation or private runtime tree");
 }
 
 const runtime = path.join(ROOT_DIR, "runtime", "native-cc-connect");

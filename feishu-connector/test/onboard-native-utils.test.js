@@ -7,7 +7,8 @@ import test from "node:test";
 import {
   atomicPrivateWrite,
   nativeConfigMatchesPending,
-  sanitizeDiagnostic
+  sanitizeDiagnostic,
+  upgradeNativeWorkspacePolicy
 } from "../../scripts/onboard-native-utils.mjs";
 
 test("sanitizeDiagnostic removes credentials, URL data, identities, and absolute paths", () => {
@@ -96,6 +97,60 @@ test("nativeConfigMatchesPending only accepts the matching private configuration
   assert.equal(nativeConfigMatchesPending(config, pending), true);
   assert.equal(nativeConfigMatchesPending(config.replace("example-secret-value", "other"), pending), false);
   assert.equal(nativeConfigMatchesPending(config, { ...pending, workspace: "/private/example-user/Other" }), false);
+});
+
+test("upgradeNativeWorkspacePolicy enables native directory commands for the owner only", () => {
+  const ownerId = ["ou", "exampleowner"].join("_");
+  const dispatcherId = ["ou", "exampledispatcher"].join("_");
+  const executionChatId = ["oc", "exampleexecution"].join("_");
+  const config = [
+    "[[projects]]",
+    `admin_from = ${JSON.stringify(ownerId)}`,
+    `approval_from = ${JSON.stringify(ownerId)}`,
+    'disabled_commands = ["dir", "workspace", "status", "usage"]',
+    "",
+    "[[projects.platforms]]",
+    'type = "feishu"',
+    "",
+    "[projects.platforms.options]",
+    `allow_from = ${JSON.stringify(`${ownerId},${dispatcherId}`)}`,
+    `approval_from = ${JSON.stringify(ownerId)}`,
+    `allow_chat = ${JSON.stringify(executionChatId)}`,
+    ""
+  ].join("\n");
+
+  const upgraded = upgradeNativeWorkspacePolicy(config);
+
+  assert.equal(upgraded.changed, true);
+  const disabledLine = upgraded.content.split("\n").find((line) => line.startsWith("disabled_commands = "));
+  assert.doesNotMatch(disabledLine, /"dir"|"workspace"/);
+  assert.match(disabledLine, /"status"/);
+  assert.equal(
+    upgraded.content.split("\n").filter((line) => line === `admin_from = ${JSON.stringify(ownerId)}`).length,
+    2
+  );
+  const repeated = upgradeNativeWorkspacePolicy(upgraded.content);
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.content, upgraded.content);
+});
+
+test("upgradeNativeWorkspacePolicy rejects a mismatched platform administrator", () => {
+  const ownerId = ["ou", "exampleowner"].join("_");
+  const anotherOwnerId = ["ou", "anotherowner"].join("_");
+  const config = [
+    "[[projects]]",
+    `admin_from = ${JSON.stringify(ownerId)}`,
+    'disabled_commands = ["dir", "workspace"]',
+    "[[projects.platforms]]",
+    "[projects.platforms.options]",
+    `admin_from = ${JSON.stringify(anotherOwnerId)}`,
+    ""
+  ].join("\n");
+
+  assert.throws(
+    () => upgradeNativeWorkspacePolicy(config),
+    /project and platform admin policies do not match/
+  );
 });
 
 test("atomicPrivateWrite installs a complete mode-600 file exclusively", async (t) => {

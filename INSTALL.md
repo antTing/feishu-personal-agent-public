@@ -38,7 +38,7 @@ npm ci --prefix feishu-connector
 默认安装不要求你去开放平台查找或复制 App ID、App Secret、主人 `open_id`、群 `chat_id` 或 Aily 机器人 `open_id`。运行：
 
 ```bash
-./scripts/onboard-native.sh --workspace '/绝对路径/到/工作区'
+./scripts/onboard-native.sh --initial-workspace '/绝对路径/到/初始目录'
 ```
 
 运行前会先验证本机存在支持 `app-server` 的 Codex 执行器，避免创建完飞书应用后才发现执行端不可用。安装器随后会按顺序完成：
@@ -58,7 +58,7 @@ npm ci --prefix feishu-connector
 不使用 Aily、只让主人直接使用时运行：
 
 ```bash
-./scripts/onboard-native.sh --without-dispatcher --workspace '/绝对路径/到/工作区'
+./scripts/onboard-native.sh --without-dispatcher --initial-workspace '/绝对路径/到/初始目录'
 ```
 
 浏览器无法自动打开时，安装器会停止，避免把一次性值暴露给代装 Agent。本人可以在独立终端加 `--no-open --show-pairing-codes` 继续；这时终端会显示短时授权链接和配对码。它们只能按页面指引用于本次官方授权和指定执行群的配对消息，不得转发到其他会话、Issue 或日志中。
@@ -67,7 +67,17 @@ npm ci --prefix feishu-connector
 
 详细权限和人工审批边界见 [feishu-enterprise-app-setup.md](feishu-enterprise-app-setup.md)。`init-native-config.sh` 仅保留为已有应用的高级恢复入口，新安装不需要手工填写任何飞书 ID 或密钥。
 
-工作区可以是 Git 仓库，也可以是没有 Git 的普通目录。原生第一阶段使用一个固定工作区；未知工作区、只读/开发拆分和分支门禁先由 Aily/主人确认，不能让消息直接传入任意路径。
+`--initial-workspace` 只设置第一次 Agent 会话的工作目录，不是唯一授权工作区。目录可以是 Git 仓库，也可以是没有 Git 的普通目录。安装完成后，主人可在执行群发送 cc-connect 原生 `/dir /绝对路径`，让下一次新会话从该目录开始；Aily 和其他来源无权执行 `/dir` 或 `/workspace`，任务正文中的路径也不会自动切换目录。
+
+cc-connect 原生 `mode = "multi-workspace"` 及 `/workspace` 命令仍可由高级用户自行启用。本安装器默认不启用它，因为 v1.4.1 的绑定键按频道计算，同一个飞书执行群里的不同话题并不天然得到独立工作区绑定。普通使用直接由主人按需 `/dir` 即可，不需要本项目再维护一套工作区注册表。
+
+从早期 `v0.2` 固定工作区配置升级时，先停止 cc-connect，更新源码并重新构建，然后执行一次：
+
+```bash
+./scripts/onboard-native.sh --upgrade-workspace-policy
+```
+
+该迁移复用安装器的私有文件校验、排他锁和原子写入，只移除旧配置里的 `/dir`、`/workspace` 禁用项，并把既有主人身份复制到飞书平台的管理门禁；不会显示 App Secret、身份 ID 或配置正文。新安装不需要运行。
 
 自动安装不会覆盖已有配置，也不会自动删除未完成的应用或私有状态。
 
@@ -103,7 +113,7 @@ Aily 只在任务确实需要本机能力时，在执行群中明确 `@` 本地�
 ```text
 请阅读 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md，按原生 cc-connect 模式帮我安装。
 
-先完整阅读 INSTALL.md、SECURITY.md 和当前目录的 AGENTS.md，列出依赖、拟执行命令和拟修改文件。不要读取、打印、记录或提交任何密钥、Token、Cookie、飞书消息链接、一次性授权链接、配对码或完整个人路径。询问我工作区路径以及是否使用 Aily，然后可以按默认参数启动 onboard-native.sh；不要添加 --no-open、--show-pairing-codes 或 --recover-lock。浏览器授权、企业管理员审批、执行群配对、Aily 配对和主人最终确认由我在飞书界面完成。脚本生成私有状态和配置后，你只能检查文件存在和权限，不能读取正文。
+先完整阅读 INSTALL.md、SECURITY.md 和当前目录的 AGENTS.md，列出依赖、拟执行命令和拟修改文件。不要读取、打印、记录或提交任何密钥、Token、Cookie、飞书消息链接、一次性授权链接、配对码或完整个人路径。询问我初始工作目录以及是否使用 Aily，然后可以按默认参数启动 onboard-native.sh；初始目录不是唯一工作区。不要添加 --no-open、--show-pairing-codes 或 --recover-lock。浏览器授权、企业管理员审批、执行群配对、Aily 配对和主人最终确认由我在飞书界面完成。脚本生成私有状态和配置后，你只能检查文件存在和权限，不能读取正文。
 
 任何 Git 命令、系统软件安装、删除、覆盖配置、开机自启动或网络端口变更都先向我询问。完成后运行测试和 release-check；不要在受管终端中后台启动服务，最后提示我在本人普通终端运行 ./scripts/start-native.sh。
 ```
