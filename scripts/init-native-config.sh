@@ -2,4 +2,5 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$SCRIPT_DIR/start-native.sh"
+exec node "$SCRIPT_DIR/init-native-config.mjs" "$@"
+

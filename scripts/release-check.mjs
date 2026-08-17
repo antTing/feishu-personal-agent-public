@@ -25,6 +25,8 @@ const PUBLIC_ENTRIES = [
   "third-party",
   "agent-workspace",
   "config",
+  "docs",
+  "native",
   "feishu-connector",
   "scripts",
   "feishu-enterprise-app-setup.md",
@@ -44,11 +46,30 @@ const REQUIRED_ENTRIES = [
   "third-party/cc-connect-MIT.txt",
   "third-party/lark-node-sdk-MIT.txt",
   "config/cc-connect.example.toml",
+  "config/cc-connect-native.example.toml",
+  "config/aily-router.example.md",
   "config/feishu-connector.example.json",
+  "native/README.md",
+  "native/config-template.mjs",
+  "native/dispatch-envelope.mjs",
+  "docs/aily-dispatch-protocol.zh-CN.md",
+  "docs/task-session-model.zh-CN.md",
+  "docs/native-migration.zh-CN.md",
   "feishu-connector/package.json",
   "feishu-connector/package-lock.json",
+  "feishu-connector/src/native-onboarding.js",
   "scripts/init-config.sh",
+  "scripts/init-native-config.sh",
+  "scripts/init-native-config.mjs",
+  "scripts/onboard-native.sh",
+  "scripts/onboard-native.mjs",
+  "scripts/onboard-native-utils.mjs",
+  "scripts/codex-cli-env.sh",
+  "scripts/export-public.sh",
+  "scripts/export-public.mjs",
   "scripts/build-cc-connect-local.sh",
+  "scripts/patch-cc-connect-local.mjs",
+  "scripts/start-native.sh",
   "scripts/start-background.sh",
   "scripts/start-feishu-connector.sh",
   "scripts/status.sh",
@@ -104,6 +125,7 @@ const DENIED_SUFFIXES = new Set([
   ".mp3", ".wav", ".m4a", ".mp4", ".mov", ".avi", ".mkv"
 ]);
 const TOKEN_ID = /\b(?:app|cli|oc|od|oi|om|on|ou|un|usr)_[A-Za-z0-9_-]{8,}\b/g;
+const ALLOWED_PROTOCOL_IDENTIFIERS = new Set(["app_server_url"]);
 const PERSONAL_PATH = /(?:\/Users\/[A-Za-z0-9._-]+|\/home\/[A-Za-z0-9._-]+|\/private\/var\/folders\/[A-Za-z0-9._/-]+|\/var\/folders\/[A-Za-z0-9._/-]+|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+)/g;
 const FEISHU_PRIVATE_LINK = /https?:\/\/(?!open\.)[^\s"']*feishu\.cn\/(?:message|wiki|docx|base|sheets|drive)\/[A-Za-z0-9_-]{8,}/g;
 const SECRET_ASSIGNMENT = /\b(?:appsecret|app_secret|bridge[_-]?token|management[_-]?token|token|secret|api[_-]?key|access[_-]?token|secret[_-]?key)\b\s*(?::|=)\s*["']([^"'\r\n]{12,})["']/gi;
@@ -128,13 +150,21 @@ const ALLOWED_SECRET_PREFIXES = [
   "dummy-"
 ];
 const EXECUTABLE_ENTRIES = [
+  "scripts/export-public.sh",
+  "scripts/export-public.mjs",
   "scripts/init-config.sh",
+  "scripts/init-native-config.sh",
+  "scripts/init-native-config.mjs",
+  "scripts/onboard-native.sh",
+  "scripts/onboard-native.mjs",
   "scripts/build-cc-connect-local.sh",
+  "scripts/patch-cc-connect-local.mjs",
   "scripts/preflight.sh",
   "scripts/release-check.sh",
   "scripts/start.sh",
   "scripts/start-background.sh",
   "scripts/start-feishu-connector.sh",
+  "scripts/start-native.sh",
   "scripts/status.sh",
   "scripts/stop.sh",
   "scripts/rotate-secrets.sh",
@@ -248,7 +278,14 @@ for (const filePath of files) {
     continue;
   }
   const content = buffer.toString("utf8");
-  addMatches(findings, filePath, content, TOKEN_ID, "Feishu-like concrete ID");
+  addMatches(
+    findings,
+    filePath,
+    content,
+    TOKEN_ID,
+    "Feishu-like concrete ID",
+    (match) => !ALLOWED_PROTOCOL_IDENTIFIERS.has(match[0])
+  );
   addMatches(findings, filePath, content, PERSONAL_PATH, "personal absolute path");
   addMatches(findings, filePath, content, FEISHU_PRIVATE_LINK, "private Feishu resource link");
   addMatches(findings, filePath, content, PRIVATE_KEY_HEADER, "private key material");

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE_STATE = path.resolve(TEST_DIR, "../../scripts/service-state.mjs");
 const SOURCE_START = path.resolve(TEST_DIR, "../../scripts/start-feishu-connector.sh");
+const SOURCE_CODEX_ENV = path.resolve(TEST_DIR, "../../scripts/codex-cli-env.sh");
 const SOURCE_ENDPOINTS = path.resolve(TEST_DIR, "../../scripts/service-endpoints.mjs");
 const SOURCE_CONFIG = path.resolve(TEST_DIR, "../src/config.js");
 
@@ -197,6 +198,7 @@ test("start preflight resolves modules from the install root, not the caller cwd
   ]);
   const startPath = path.join(scripts, "start-feishu-connector.sh");
   await writeFile(startPath, await readFile(SOURCE_START, "utf8"), { mode: 0o755 });
+  await writeFile(path.join(scripts, "codex-cli-env.sh"), await readFile(SOURCE_CODEX_ENV, "utf8"), { mode: 0o600 });
   await writeFile(path.join(runtime, "feishu-connector", "config.json"), "{}\n", { mode: 0o600 });
   await writeFile(path.join(runtime, "bin", "cc-connect-local"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
   await writeFile(path.join(hostileCwd, "feishu-connector", "src", "config.js"), "throw new Error('caller module loaded');\n");
@@ -207,6 +209,7 @@ test("start preflight resolves modules from the install root, not the caller cwd
     "exit 9",
     ""
   ].join("\n"), { mode: 0o755 });
+  await writeFile(path.join(fakeBin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
 
   const result = spawnSync("/bin/sh", [startPath], {
     cwd: hostileCwd,

@@ -9,6 +9,8 @@ CC_CONNECT="$ROOT_DIR/runtime/bin/cc-connect-local"
 RUNTIME_ROOT="$ROOT_DIR/runtime"
 SERVICE_STATE="$SCRIPT_DIR/service-state.mjs"
 
+. "$SCRIPT_DIR/codex-cli-env.sh"
+
 umask 077
 printf 'startup-stage=wrapper-entered\n' >&2
 
@@ -18,6 +20,15 @@ for required_command in node pgrep nc; do
     exit 1
   fi
 done
+
+if ! ensure_codex_cli; then
+  printf 'Codex runtime is unavailable. Install or sign in to Codex CLI, or install the ChatGPT/Codex desktop app.\n' >&2
+  exit 1
+fi
+if ! codex app-server --help >/dev/null 2>&1; then
+  printf 'The available Codex runtime does not support app-server. Update Codex CLI.\n' >&2
+  exit 1
+fi
 
 if [ ! -f "$CONNECTOR_CONFIG" ]; then
   printf 'Feishu Connector is not configured. Run: ./scripts/init-config.sh\n' >&2

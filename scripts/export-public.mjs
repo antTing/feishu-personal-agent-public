@@ -24,6 +24,8 @@ const PUBLIC_ENTRIES = [
   "third-party",
   "agent-workspace",
   "config",
+  "docs",
+  "native",
   "feishu-connector",
   "scripts",
   "feishu-enterprise-app-setup.md",

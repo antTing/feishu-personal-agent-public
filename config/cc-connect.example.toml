@@ -1,3 +1,4 @@
+# 旧 Connector/Bridge 兼容模式模板。新安装使用 cc-connect-native.example.toml。
 language = "zh"
 # `scripts/init-config.sh` replaces this with the absolute installation path.
 data_dir = "/absolute/path/to/installation/runtime/cc-connect/data"
@@ -58,6 +59,7 @@ type = "codex"
 [projects.agent.options]
 work_dir = "/absolute/path/to/approved-workspace"
 backend = "app_server"
+app_server_url = "stdio"
 mode = "suggest"
 
 [management]

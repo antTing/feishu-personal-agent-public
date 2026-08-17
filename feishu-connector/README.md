@@ -1,5 +1,7 @@
 # 飞书连接器
 
+> 兼容模式：新安装请使用仓库根目录 README 中的“cc-connect 原生 Feishu”方案。本目录只为现有 Bridge 部署迁移期间保留，原生 PoC 通过后会移除。
+
 飞书企业自建应用与 cc-connect Bridge 之间的轻量连接器：
 
 ```text
@@ -34,7 +36,7 @@ npm test --prefix feishu-connector
 
 白名单内其他机器人可在获准群中明确 `@` 当前企业应用机器人转交任务。应用需要 `im:message.group_at_msg.include_bot:readonly` 权限；不需要也不建议为了这个功能申请读取群全部消息。
 
-机器人私聊、未 `@`、非白名单群、自身消息和回复回环都会被忽略。图片、附件和语音本体当前不下载；卡片中的链接会保留为文字 URL。
+机器人私聊、未 `@`、非白名单群、自身消息和回复回环都会被忽略。旧 Connector 不下载图片、附件和语音；这是改用原生 cc-connect 的主要原因之一。
 
 ## 工作区
 

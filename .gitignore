@@ -12,6 +12,7 @@ feishu-connector/node_modules/
 .vscode/
 .aws/
 .codex/
+.cc-connect/
 .config/
 .cursor/
 .gnupg/

@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+umask 077
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
@@ -22,6 +23,23 @@ cleanup() {
   rm -rf "$BUILD_DIR"
 }
 trap cleanup EXIT INT TERM
+
+ensure_private_dir() {
+  target=$1
+  if [ -L "$target" ]; then
+    printf 'Refusing symbolic-link private directory.\n' >&2
+    exit 1
+  fi
+  if [ -e "$target" ]; then
+    if [ ! -d "$target" ]; then
+      printf 'Private runtime path is not a directory.\n' >&2
+      exit 1
+    fi
+  else
+    mkdir -m 700 "$target"
+  fi
+  chmod 700 "$target"
+}
 
 mkdir -p "$CACHE_DIR" "$GO_BUILD_CACHE" "$GO_MODULE_CACHE" "$GO_TMP_DIR"
 
@@ -49,16 +67,48 @@ fi
 tar -xzf "$ARCHIVE" -C "$BUILD_DIR"
 
 CC_SOURCE_DIR="$SOURCE_DIR" node "$SCRIPT_DIR/patch-cc-connect-local.mjs"
+gofmt -w \
+  "$SOURCE_DIR/config/config.go" \
+  "$SOURCE_DIR/core/i18n.go" \
+  "$SOURCE_DIR/core/private_files.go" \
+  "$SOURCE_DIR/core/message.go" \
+  "$SOURCE_DIR/core/engine.go" \
+  "$SOURCE_DIR/core/local_approval_patch_test.go" \
+  "$SOURCE_DIR/core/local_attachment_patch_test.go" \
+  "$SOURCE_DIR/core/local_private_files_patch_test.go" \
+  "$SOURCE_DIR/core/local_command_patch_test.go" \
+  "$SOURCE_DIR/agent/codex/appserver_session.go" \
+  "$SOURCE_DIR/agent/codex/local_attachment_patch_test.go" \
+  "$SOURCE_DIR/agent/codex/local_private_images_patch_test.go" \
+  "$SOURCE_DIR/platform/feishu/card.go" \
+  "$SOURCE_DIR/platform/feishu/feishu.go" \
+  "$SOURCE_DIR/platform/feishu/local_approval_patch_test.go" \
+  "$SOURCE_DIR/platform/feishu/local_reply_mention_patch_test.go" \
+  "$SOURCE_DIR/cmd/cc-connect/main.go"
+
+(
+  cd "$SOURCE_DIR"
+  GOCACHE="$GO_BUILD_CACHE" GOMODCACHE="$GO_MODULE_CACHE" GOTMPDIR="$GO_TMP_DIR" GOTELEMETRY=off \
+    go test ./core ./platform/feishu ./agent/codex \
+      -run '^(TestLocalPatch.*|TestNormalizeAppServerURL_EmptyDefaultsToStdIO)$' -count=1
+  GOCACHE="$GO_BUILD_CACHE" GOMODCACHE="$GO_MODULE_CACHE" GOTMPDIR="$GO_TMP_DIR" GOTELEMETRY=off \
+    go test -tags no_web ./config ./cmd/cc-connect -run '^$'
+  CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOCACHE="$GO_BUILD_CACHE" GOMODCACHE="$GO_MODULE_CACHE" GOTMPDIR="$GO_TMP_DIR" GOTELEMETRY=off \
+    go test -c -o "$BUILD_DIR/core-windows.test.exe" ./core
+  CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOCACHE="$GO_BUILD_CACHE" GOMODCACHE="$GO_MODULE_CACHE" GOTMPDIR="$GO_TMP_DIR" GOTELEMETRY=off \
+    go test -c -o "$BUILD_DIR/codex-windows.test.exe" ./agent/codex
+)
 
 (
   cd "$SOURCE_DIR"
   GOCACHE="$GO_BUILD_CACHE" GOMODCACHE="$GO_MODULE_CACHE" GOTMPDIR="$GO_TMP_DIR" GOTELEMETRY=off \
     go build -tags no_web -trimpath \
-      -ldflags "-s -w -X main.version=v$VERSION-local -X main.commit=localhost-bridge -X main.buildTime=$BUILD_TIME" \
+      -ldflags "-s -w -X main.version=v$VERSION-local -X main.commit=native-feishu-policy -X main.buildTime=$BUILD_TIME" \
       -o "$BUILD_DIR/cc-connect-local" ./cmd/cc-connect
 )
 
-mkdir -p "$OUTPUT_DIR"
+ensure_private_dir "$ROOT_DIR/runtime"
+ensure_private_dir "$OUTPUT_DIR"
 mv "$BUILD_DIR/cc-connect-local" "$OUTPUT"
 chmod 700 "$OUTPUT"
 "$OUTPUT" --version

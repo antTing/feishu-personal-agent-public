@@ -1,201 +1,119 @@
 # 安装指南
 
-本文面向 macOS 和 Linux。Windows 建议在 WSL 中运行。服务默认以前台进程启动，适合个人电脑或单机 VM；它不是多租户 SaaS。
+本文安装的是推荐的“原生 cc-connect + 飞书企业自建应用”模式。旧版 `Feishu Connector -> Bridge` 只用于兼容已有部署；不要把两个模式同时接到同一个飞书应用。
 
 ## 1. 前置条件
 
-- Node.js 22 或更高版本，以及 npm。
-- Go 1.25 或更高版本，用于在本机编译固定版本的 cc-connect。
-- `curl`、`tar`、`shasum` 或 `sha256sum`、`pgrep`。
-- Codex CLI，并完成一种可用的登录方式。
-- 一个飞书企业自建应用，而不是群自定义 Webhook 机器人。
+- macOS、Linux 或 WSL；
+- Node.js 22+、npm；
+- Go 1.25+（用于构建固定版本 cc-connect）；
+- `curl`、`tar`、`shasum` 或 `sha256sum`；
+- Codex CLI，或带有可复用内置执行器的 ChatGPT/Codex 桌面应用，并完成登录；
+- 一个可以创建企业自建应用的飞书账号。应用、机器人、权限、事件和身份值由安装器自动处理。
 
-Codex CLI 的安装和登录方式可能变化，请以 [Codex CLI 官方文档](https://developers.openai.com/codex/cli) 为准。当前官方安装器示例为：
+启动脚本会优先使用当前 `PATH` 中的 `codex`；macOS 找不到时，会自动尝试复用 ChatGPT/Codex 桌面应用内置的执行器，不要求重复安装。仍找不到或版本不支持 `app-server` 时，再按[官方文档](https://developers.openai.com/codex/cli)安装或更新 Codex CLI。不要把 API Key 写入仓库、Agent 提示词或飞书消息。
 
-```bash
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
-codex
-```
+## 2. 获取源码和构建本机 cc-connect
 
-首次运行 `codex` 时选择可用的登录方式。不要把 API Key 写入本仓库、安装提示词或飞书消息。Codex 会在会话启动时读取 `AGENTS.md`；发现规则见 [AGENTS.md 官方说明](https://developers.openai.com/codex/guides/agents-md)。
+可以由本人手动下载发行包，也可以让 Agent 先提出命令并在你批准后执行。任何 Git 命令都必须由你针对完整命令明确批准。
 
-## 2. 获取源码与依赖
+仓库地址为 [antTing/feishu-personal-agent-public](https://github.com/antTing/feishu-personal-agent-public)。可以在 GitHub 下载并解压源码包；使用 Git 时，在明确批准完整命令后执行：
 
 ```bash
 git clone https://github.com/antTing/feishu-personal-agent-public.git
 cd feishu-personal-agent-public
+```
+
+进入源码目录后安装依赖并构建：
+
+```bash
 npm ci --prefix feishu-connector
-```
-
-若让 Agent 执行安装，任何 `git clone`、`git pull` 或其他 Git 命令仍应先由人明确批准。也可以下载发行包并解压，从而不使用 Git。
-
-## 3. 创建飞书企业自建应用
-
-按 [feishu-enterprise-app-setup.md](feishu-enterprise-app-setup.md) 完成：
-
-1. 创建企业自建应用并启用机器人能力。
-2. 选择“使用长连接接收事件”。
-3. 订阅 `im.message.receive_v1`。
-4. 申请最小消息权限并发布应用版本。
-5. 在本机私密记录 App ID、App Secret 和主人用户的 `open_id`。
-6. 如需其他机器人转交，再在本机私密记录允许的机器人 `open_id` 和群 `chat_id`。
-
-这些值是私有配置，不得放入 Issue、README、截图或提交记录。应用自身机器人 ID 由 Connector 启动时自动查询，不需要写入公开模板。
-
-## 4. 生成私有配置
-
-配置生成器只把真实值写入被忽略的 `runtime/`，文件权限为 `600`。它还会生成相互独立的 Bridge Token 和 Management Token，且不会打印 Token。
-
-在当前 shell 中设置必要值：
-
-```bash
-export FEISHU_APP_ID='填写应用 App ID'
-read -r -s FEISHU_APP_SECRET
-export FEISHU_APP_SECRET
-export FEISHU_OWNER_OPEN_ID='填写主人用户 open_id'
-```
-
-如需接收其他机器人转交，再设置逗号分隔的白名单：
-
-```bash
-export FEISHU_ALLOWED_BOT_IDS='填写允许的机器人 open_id'
-export FEISHU_ALLOWED_BOT_CHAT_IDS='填写允许的群 chat_id'
-```
-
-可选：首次就登记一个获准工作区。它既可以是 Git 仓库，也可以是普通目录。
-
-```bash
-export WORKSPACE_NAME='approved-workspace'
-export WORKSPACE_PATH='/absolute/path/to/approved-workspace'
-export WORKSPACE_SEARCH_ROOTS='/absolute/path/to/safe-parent'
-```
-
-生成配置：
-
-```bash
-./scripts/init-config.sh
-unset FEISHU_APP_SECRET
-```
-
-如果已有配置，脚本会拒绝覆盖。只有在停止服务并明确轮换配置时才使用：
-
-```bash
-./scripts/init-config.sh --force
-```
-
-`--force` 会完整重建配置，不应用于日常 Token 轮换。已经安装后的轮换流程见 [OPERATIONS.zh-CN.md](OPERATIONS.zh-CN.md)。
-
-`--force` 会生成新的本地 Token，因此旧进程必须重启。它不会删除已有会话或工作区状态。
-
-可用环境变量：
-
-| 变量 | 必填 | 说明 |
-|---|---:|---|
-| `FEISHU_APP_ID` | 是 | 企业自建应用 App ID |
-| `FEISHU_APP_SECRET` | 是 | 企业自建应用 App Secret |
-| `FEISHU_OWNER_OPEN_ID` | 是 | 可审批和停止任务的主人用户 |
-| `FEISHU_ALLOWED_BOT_IDS` | 否 | 允许转交任务的机器人 ID，逗号分隔 |
-| `FEISHU_ALLOWED_BOT_CHAT_IDS` | 否 | 允许机器人转交的群 ID，逗号分隔 |
-| `WORKSPACE_NAME` | 否 | 初始工作区的公开别名 |
-| `WORKSPACE_PATH` | 否 | 初始工作区绝对路径；必须与名称同时设置 |
-| `WORKSPACE_SEARCH_ROOTS` | 登记初始工作区时是 | 未登记工作区只允许在这些明确安全根目录查找 |
-| `WORKSPACE_MANAGED_ROOT` | 否 | 新空工作区的专用根目录 |
-| `CC_BRIDGE_PORT` | 否 | 默认 `9810`，仅监听 loopback |
-| `CC_MANAGEMENT_PORT` | 否 | 默认 `9820`，仅监听 loopback |
-
-## 5. 构建 cc-connect
-
-项目不发布作者机器上的二进制。构建脚本下载固定的 cc-connect v1.4.1 源码包、校验 SHA-256、精确应用本地安全补丁，然后在目标机器生成 `runtime/bin/cc-connect-local`：
-
-```bash
 ./scripts/build-cc-connect-local.sh
 ```
 
-若下载哈希或补丁目标不匹配，脚本会停止。不要跳过校验，也不要用来源不明的预编译二进制替换。
+构建脚本固定 cc-connect v1.4.1，校验源码包 SHA-256，并应用本地安全补丁。项目不发布作者机器上的二进制。
 
-## 6. 检查与启动
+## 3. 一键创建应用并自动配对
+
+默认安装不要求你去开放平台查找或复制 App ID、App Secret、主人 `open_id`、群 `chat_id` 或 Aily 机器人 `open_id`。运行：
+
+```bash
+./scripts/onboard-native.sh --workspace '/绝对路径/到/工作区'
+```
+
+运行前会先验证本机存在支持 `app-server` 的 Codex 执行器，避免创建完飞书应用后才发现执行端不可用。安装器随后会按顺序完成：
+
+1. 打开飞书官方的一键建应用授权页；
+2. 复用飞书官方 `PersonalAgent` 基座，并增量声明消息权限、`im.message.receive_v1` 事件和 `card.action.trigger` 回调；
+3. 你在浏览器确认应用名称和权限；安装器随后逐项核对实际授权结果，缺权限时自动向企业管理员发起审批。管理员批准后重新运行同一命令继续；
+4. App ID 和 App Secret 直接写入本机 `600` 私有状态，不在终端显示；
+5. 扫码账号已经确定为主人。安装器在本机浏览器显示执行群配对码；把新机器人加入目标执行群，由主人按页面提示在该群 `@` 一次，安装器只用这条消息取得并确认执行群 `chat_id`；
+6. 浏览器显示 Aily 配对码；让 Aily 在同一群按页面提示 `@` 一次，识别候选调度机器人；
+7. 浏览器显示确认和拒绝两条命令；主人先核对群里报到的机器人。正确时回复 Aily 的那条配对消息并 `@` 新机器人确认；不正确时回复同一条消息并发送拒绝命令，安装器会清除候选并生成新的调度配对码；
+8. 只有主人确认后，安装器才写入严格的 `allow_from`、`allow_chat` 和 `approval_from`；
+9. 完成后删除临时配对状态和本机配对页面。
+
+配对阶段只监听明确 `@` 新机器人且包含完整一次性随机码的文本、富文本或卡片消息，不启动 Codex，也不会执行任何任务。只要最终配置尚未安装，中断或等待超时都可以重新运行同一命令继续配对；应用凭据已经写入本机私有状态后不会再次创建应用。若机器在飞书已创建应用、但本机尚未来得及保存凭据的极短窗口断电，可能留下一个未绑定应用；安装器不会擅自删除它，应由主人在飞书中确认后处理。若最终配置已经写入而清理状态时中断，下一次运行会校验并清理匹配的临时状态，不会覆盖配置或重复创建应用。
+
+不使用 Aily、只让主人直接使用时运行：
+
+```bash
+./scripts/onboard-native.sh --without-dispatcher --workspace '/绝对路径/到/工作区'
+```
+
+浏览器无法自动打开时，安装器会停止，避免把一次性值暴露给代装 Agent。本人可以在独立终端加 `--no-open --show-pairing-codes` 继续；这时终端会显示短时授权链接和配对码。它们只能按页面指引用于本次官方授权和指定执行群的配对消息，不得转发到其他会话、Issue 或日志中。
+
+如果异常断电留下安装锁，先确认没有其他安装器运行，再由本人显式追加 `--recover-lock` 重试。代装 Agent 不得自行使用该选项，也不得检查私有锁正文。
+
+详细权限和人工审批边界见 [feishu-enterprise-app-setup.md](feishu-enterprise-app-setup.md)。`init-native-config.sh` 仅保留为已有应用的高级恢复入口，新安装不需要手工填写任何飞书 ID 或密钥。
+
+工作区可以是 Git 仓库，也可以是没有 Git 的普通目录。原生第一阶段使用一个固定工作区；未知工作区、只读/开发拆分和分支门禁先由 Aily/主人确认，不能让消息直接传入任意路径。
+
+自动安装不会覆盖已有配置，也不会自动删除未完成的应用或私有状态。
+
+## 4. 前台验证
+
+```bash
+./scripts/start-native.sh
+```
+
+看到 cc-connect 成功建立 Feishu WebSocket 后，在执行群中发送一个明确 `@` 本地机器人的只读任务。原生模式应能显示思考/工具进度，并能接收图片或文件。先不要让任务修改文件或运行生产命令。
+
+停止前台进程使用 `Ctrl-C`。当前 `v0.2` 只验证了这个前台入口，尚未提供适配本项目 Codex PATH 发现逻辑的一键 launchd/systemd 安装器。不要直接安装 cc-connect daemon，也不要把受管 Agent 会话中的 `nohup` 当作可靠服务托管。
+
+图片和文件会暂存在目标工作区的 `.cc-connect/`。如果目标工作区由版本控制管理，请由主人把 `.cc-connect/` 加入该项目自己的忽略规则；本项目的 `.gitignore` 不会影响外部工作区，安装器也不会擅自修改它。
+
+## 5. 检查
 
 ```bash
 npm test --prefix feishu-connector
 ./scripts/release-check.sh
-./scripts/preflight.sh
-./scripts/start-background.sh
-./scripts/status.sh
 ```
 
-`start-background.sh` 在后台启动 cc-connect、Connector 和需要的 Codex 子进程。`status.sh` 查看状态，`stop.sh` 停止。首次排障也可使用 `start.sh` 前台启动，按 `Ctrl-C` 停止。当前版本不自动安装 launchd 或 systemd 服务。完整运维流程见 [OPERATIONS.zh-CN.md](OPERATIONS.zh-CN.md)。
+这些检查不需要读取私有运行数据。配置问题只在本机终端排查，不要把配置内容、日志、会话或截图发给 Agent。
 
-后台命令应由本人在普通终端执行。Codex、CI 或其他受管终端可能在命令返回后回收后台进程组，即使使用 `nohup` 也不能视为可靠托管。
+## 6. Aily 分流配置
 
-若要生成可以上传到代码托管平台的干净目录，而不是直接压缩当前工作目录：
+Aily 只在任务确实需要本机能力时，在执行群中明确 `@` 本地机器人，并发送 [任务分发协议](docs/aily-dispatch-protocol.zh-CN.md)规定的 `DS/T` 封装。可直接以 [Aily 路由规则模板](config/aily-router.example.md)为起点配置系统提示词。问候、测试和已经由 Aily 能完成的飞书操作不要转交。
 
-```bash
-./scripts/export-public.sh /tmp/feishu-personal-agent-public
-```
+这份模板是协议参考，不是可运行的持久调度器。要实现同一 `DS` 排队、不同 `DS` 并行、重启恢复、去重和按 `T` 停止，必须在 Aily 平台的工作流/数据存储中实现相应状态机，或自行部署上游调度服务。仅有系统提示词时不要承诺这些语义；可先使用 `--without-dispatcher` 的主人直连模式。
 
-导出器会在返回成功前自动扫描完整导出树；目标目录必须不存在且位于源码树之外。
-
-不要把 `runtime/` 复制到发布目录。
-
-## 7. 飞书验收
-
-直连模式可以先私聊企业应用机器人完成端到端验证：
+## 7. 给 Agent 的安装提示词
 
 ```text
-你好
-你能做什么？
-任务状态
+请阅读 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md，按原生 cc-connect 模式帮我安装。
+
+先完整阅读 INSTALL.md、SECURITY.md 和当前目录的 AGENTS.md，列出依赖、拟执行命令和拟修改文件。不要读取、打印、记录或提交任何密钥、Token、Cookie、飞书消息链接、一次性授权链接、配对码或完整个人路径。询问我工作区路径以及是否使用 Aily，然后可以按默认参数启动 onboard-native.sh；不要添加 --no-open、--show-pairing-codes 或 --recover-lock。浏览器授权、企业管理员审批、执行群配对、Aily 配对和主人最终确认由我在飞书界面完成。脚本生成私有状态和配置后，你只能检查文件存在和权限，不能读取正文。
+
+任何 Git 命令、系统软件安装、删除、覆盖配置、开机自启动或网络端口变更都先向我询问。完成后运行测试和 release-check；不要在受管终端中后台启动服务，最后提示我在本人普通终端运行 ./scripts/start-native.sh。
 ```
 
-其中“你好”和“你能做什么？”会进入 Codex，用于验证完整模型链路并产生相应模型用量；`任务状态` 由 Connector 本地处理。
+## 8. 从旧 Connector 迁移
 
-如果采用 Aily 前台分流模式，问候和测试应留在 Aily，不要转交。先由主人向本地机器人发送 `任务状态` 验证 Connector，再让 Aily 在白名单群中明确 `@` 本地机器人，转交一个确实需要访问本机的只读任务。
+1. 记录旧服务当前状态，确认没有任务正在执行；
+2. 停止旧服务；
+3. 旧应用继续使用时可走高级恢复入口；更简单的做法是运行自动安装创建一个新的原生应用；
+4. 启动原生 cc-connect 并完成只读、媒体、线程和停止验收；
+5. 验收通过后再删除旧 Connector 的运行配置和会话（由主人确认，安装脚本不会自动删除）。
 
-再在白名单群中明确 `@` 机器人发送一个只读任务。若配置了来源机器人，让该机器人在同一白名单群中明确 `@` 当前机器人转交一条任务。
-
-验收结果应满足：
-
-- 非白名单用户、未 `@` 群消息和非白名单机器人不触发任务。
-- 回复引用原消息；群回复同时 `@` 原发送者。
-- `任务状态` 能显示任务编号；`停止任务 T-XXXXXXXX` 能停止指定任务。
-- Git 工作区的开发任务先询问分支；普通目录不要求分支。
-- 写文件或执行命令时返回一次性操作审批。
-
-## 8. 让 Agent 代装
-
-把下面提示词交给 Codex、Claude Code 或其他有本机终端权限的 Agent：
-
-```text
-请参考 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md 帮我安装和配置。
-
-要求：
-1. 先完整阅读 INSTALL.md、SECURITY.md 和当前目录的 AGENTS.md，只读检查环境并列出缺失依赖、拟执行命令和拟修改文件。
-2. 不要读取、打印、记录或提交已有密钥。执行到第 4 节配置 App Secret 和本地 Token 前必须暂停，由我在另一个终端亲自运行环境变量设置和 `./scripts/init-config.sh`；不要代我执行带秘密环境变量的命令。初始化完成后，你只能检查配置文件是否存在、权限是否为 600/700，不能读取或回显内容。非秘密身份 ID、Codex 登录和工作区路径逐项确认。
-3. 任何 Git 命令、系统软件安装、权限扩大、删除、覆盖已有配置或开机自启动都必须先获得我的明确批准。
-4. 只使用 runtime/ 保存真实配置，权限设为 600/700；随机生成 Bridge 和 Management Token，不向公网或局域网开放端口。
-5. 不要替我创建或发布飞书应用，也不要猜测 ID、工作区路径或登录方式。
-6. 完成后运行 npm test、scripts/release-check.sh 和 scripts/preflight.sh，汇报结果但不回显密钥或完整本地路径。
-7. 不要在 Agent 受管终端中把服务当作后台常驻；验证完成后停止前台进程，并提示我在本人普通终端执行 `./scripts/start-background.sh`。
-```
-
-Agent 可以完成依赖检查、目录准备、构建、测试和前台验证；包含秘密的配置生成命令、飞书后台操作、身份值提供、Codex 登录、高风险动作和最终后台启动仍由人负责。
-
-## 9. 故障排查
-
-`preflight` 提示 Codex 未登录：若使用交互式登录，在终端运行 `codex` 并完成登录后重试；若使用其他受支持的认证方式，请单独验证一次 Codex 调用。需要把未登录视为预检失败时，运行 `PREFLIGHT_REQUIRE_CODEX_AUTH=1 ./scripts/preflight.sh`。
-
-Connector 无法收到消息：确认使用企业自建应用、长连接事件已启用、`im.message.receive_v1` 已订阅、权限对应的应用版本已经发布，且当前用户在可用范围内。
-
-群消息无响应：必须明确 `@` 当前机器人；用户需在 `allowedUserIds`，机器人转交还要求群和来源机器人都在白名单。
-
-Bridge 未连接：检查两个私有配置中的端口和 Token 是否由同一次 `init-config` 生成，且端口没有被其他进程占用。
-
-工作区未找到：只会在 `searchRoots` 下精确查找。提供准确路径或扩大一个最小安全搜索根；不要把个人主目录或文件系统根目录作为搜索根。
-
-## 10. 更新、轮换和卸载
-
-更新源码前先停止服务。重新安装 Node 依赖、运行构建脚本和全部检查，再启动。任何 Git 更新命令必须遵循使用者自己的审批规则。
-
-若凭据出现在日志、截图、聊天、提交或发行包中，立即在飞书后台轮换 App Secret，并按 [OPERATIONS.zh-CN.md](OPERATIONS.zh-CN.md) 使用 `rotate-secrets.sh` 同步更新 App Secret 和两个本地 Token。删除文件不能撤销已经泄露的凭据。
-
-卸载时先停止服务，再由人确认是否删除 `runtime/` 和 `managed-workspaces/`。它们可能包含会话、审批状态、日志和用户工作成果，安装脚本不会自动删除。
+旧模式和原生模式不能并行消费同一应用的长连接事件，否则飞书可能把事件随机分给其中一个连接。

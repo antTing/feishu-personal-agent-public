@@ -71,6 +71,7 @@ function projectBlock(workspace) {
       "[projects.agent.options]",
       `work_dir = ${tomlString(workspace.path)}`,
       'backend = "app_server"',
+      'app_server_url = "stdio"',
       'mode = "suggest"',
       `system_prompt = ${tomlString(DEV_PROMPT)}`,
       ""

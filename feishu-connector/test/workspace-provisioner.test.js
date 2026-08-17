@@ -96,6 +96,7 @@ test("registers separate read and development projects without exposing credenti
   assert.equal(registered.devProject, "workspace-new-service-dev");
   assert.match(config, /mode = "suggest"/);
   assert.match(config, /backend = "app_server"/);
+  assert.match(config, /app_server_url = "stdio"/);
   assert.match(config, /mode = "suggest"/);
   assert.match(config, /禁止读取或回显 \.env/);
   assert.doesNotMatch(config, /test-token/);
