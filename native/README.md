@@ -7,7 +7,7 @@ Aily（可选的前台分流）
         |
         | 在执行群中 @ 本地机器人
         v
-飞书企业自建应用机器人 -> cc-connect 原生 Feishu -> Codex
+飞书企业自建应用机器人 -> cc-connect 原生 Feishu -> Codex / Claude Code / Cursor Agent
 ```
 
 当前目录提供三样东西：
@@ -16,6 +16,8 @@ Aily（可选的前台分流）
 - `../config/cc-connect-native.example.toml`：原生飞书配置模板；
 - `../scripts/onboard-native.sh`：通过官方 `PersonalAgent` 基座自动建飞书应用、申请权限、配对身份并生成私有配置；
 - `../scripts/init-native-config.sh`：已有应用的高级恢复入口，新安装不需要手工使用。
+
+安装器的 `--agent-type` 支持 `codex`、`claude` 和 `cursor`，仅把选择转换为 cc-connect 官方配置：`codex`、`claudecode` 或通用 `acp`。本项目不实现 Agent 会话协议，也不维护另一套路由器。若要同时运行多个执行器，应按 cc-connect 原生多项目/多机器人能力配置，而不是在一个项目中动态替换 Agent。
 
 旧版 Connector 仍保留，便于从现有部署平滑迁移。不要让旧 Connector 和原生模式同时消费同一个飞书应用的长连接事件。
 

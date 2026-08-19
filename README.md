@@ -1,21 +1,21 @@
 # 飞书个人 AI Agent
 
-把飞书企业自建应用机器人接到自己电脑上的 Codex。推荐把 Aily（或其他云端智能体）作为轻量前台，只把确实需要本机文件、代码、构建或终端的任务转给本地 cc-connect。
+把飞书企业自建应用机器人接到自己电脑上的 Codex、Claude Code 或 Cursor Agent。推荐把 Aily（或其他云端智能体）作为轻量前台，只把确实需要本机文件、代码、构建或终端的任务转给本地 cc-connect。
 
 > 当前 `v0.2` 提供可运行的原生本机执行端，以及一份上游调度协议参考。仓库不包含可独立部署的 Aily 调度服务；只粘贴提示词不能自动获得持久队列、重启恢复、幂等去重或跨会话任务状态。
 
 ```text
 日常问候、测试、飞书文档/日历/任务
-        -> Aily 直接处理，不调用本地 Codex
+        -> Aily 直接处理，不调用本地执行 Agent
 
 本地代码、文件、构建、终端、电脑操作
         -> Aily 在执行群中 @ 本地机器人
-        -> cc-connect 原生 Feishu -> Codex
+        -> cc-connect 原生 Feishu -> Codex / Claude Code / Cursor Agent
 ```
 
 ## 解决什么问题
 
-如果所有对话都直接进入本地 Agent，简单问候、连通性测试和飞书云端操作也会占用 Codex 的上下文和模型用量。把这类消息留在 Aily，可以减少不必要的 Codex 调用；它不会让真正的开发任务变成零 Token，也不保证总费用一定下降，因为 Aily 也可能消耗自己的额度。
+如果所有对话都直接进入本地 Agent，简单问候、连通性测试和飞书云端操作也会占用本地执行器的上下文和模型用量。把这类消息留在 Aily，可以减少不必要的本地模型调用；它不会让真正的开发任务变成零 Token，也不保证总费用一定下降，因为 Aily 也可能消耗自己的额度。
 
 本项目不内置 Aily，也不替 Aily 做语义路由。Aily 是否能处理日历、文档、任务等飞书操作，取决于你给它配置的能力。项目提供的是本机执行端和一套通用的任务/会话约定。要实现文档描述的多任务串行、跨会话并行和准确停止，上游还必须具有持久存储或工作流能力；没有这些能力时，建议先用主人直连模式，或一次只派发一个任务。
 
@@ -27,7 +27,8 @@
 Aily（可选）
   -> 执行群中的 @ 本地机器人
   -> cc-connect 官方 Feishu WebSocket
-  -> Codex CLI / App Server
+  -> cc-connect 原生 Agent 适配器
+  -> Codex / Claude Code / Cursor Agent
   -> 主人当前选择的本地目录
 ```
 
@@ -52,7 +53,7 @@ Aily 应为每条独立任务链生成 `DS-XXXXXXXX`，为链中的每个具体�
 
 - macOS、Linux 或 WSL；
 - Node.js 22+、npm、Go 1.25+、`curl`、`tar`、哈希校验工具；
-- 已登录的 Codex CLI；
+- 至少一个已安装并登录的本机执行器：Codex CLI、Claude Code 或 Cursor Agent CLI；
 - 一个可以创建企业自建应用的飞书账号；
 - 一个准备作为执行群的飞书群；
 - 一个用于首次启动的本地目录。它不是永久授权上限，之后主人可用 cc-connect 原生 `/dir` 切换；目录可以有 Git，也可以没有。
@@ -65,7 +66,7 @@ App、机器人、权限、App Secret 及用户/机器人/群 ID 均由安装器
 把下面一句话交给 Codex、Claude Code 或其他有本机终端权限的 Agent：
 
 ```text
-请阅读 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md，按原生 cc-connect 模式帮我安装；先列出依赖和拟执行命令，询问我初始工作目录以及是否使用 Aily，然后按默认参数运行自动建应用和配对流程，不要使用显示一次性链接、配对码或恢复私有锁的选项。浏览器授权、企业审批、执行群/Aily 配对和主人最终确认由我处理；不要读取或回显私有配置、ID、Secret、一次性授权链接和配对码，完成后运行测试和 release-check。
+请阅读 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md，按原生 cc-connect 模式帮我安装；先列出依赖和拟执行命令，询问我要使用 codex、claude 还是 cursor，以及初始工作目录和是否使用 Aily，然后运行对应的自动建应用和配对流程。不要使用显示一次性链接、配对码或恢复私有锁的选项。浏览器授权、企业审批、执行群/Aily 配对和主人最终确认由我处理；不要读取或回显私有配置、ID、Secret、一次性授权链接和配对码，完成后运行测试和 release-check。
 ```
 
 Agent 可以检查依赖、构建、启动自动安装器和运行测试。你只需确认浏览器授权、必要的企业审批、把机器人加入执行群，并按本机浏览器配对页完成执行群选择、Aily 报到和主人最终确认；不需要向 Agent 提供任何飞书 ID、Secret 或配对码。
@@ -74,13 +75,13 @@ Agent 可以检查依赖、构建、启动自动安装器和运行测试。你�
 
 ```bash
 ./scripts/build-cc-connect-local.sh
-./scripts/onboard-native.sh --initial-workspace '/绝对路径/到/初始目录'
+./scripts/onboard-native.sh --agent-type codex --initial-workspace '/绝对路径/到/初始目录'
 ./scripts/start-native.sh
 ```
 
-`start-native.sh` 会优先复用当前终端中的 Codex CLI；macOS 上找不到时，会自动发现 ChatGPT/Codex 桌面应用内置的 Codex 执行器，不需要重复安装。
+`--agent-type` 支持 `codex`（默认）、`claude` 和 `cursor`。安装器只生成 cc-connect 原生配置：Codex 使用 `type = "codex"`，Claude Code 使用 `type = "claudecode"`，Cursor 使用 `type = "acp"` 和 `agent acp`。本项目不实现这些 Agent 的会话协议。Codex 模式会复用当前终端或桌面应用内置执行器；Claude/Cursor 模式要求对应 CLI 已安装并登录。
 
-`start-native.sh` 是当前经过验证的启动入口。`v0.2` 暂未提供经过验证的一键 launchd/systemd 安装器；不要直接绕过该脚本启动 cc-connect，因为它还负责发现 Codex 执行器。不要把原生模式和旧模式同时连接到同一个飞书应用。
+`start-native.sh` 是当前经过验证的启动入口。`v0.2` 暂未提供经过验证的一键 launchd/systemd 安装器；不要直接绕过该脚本启动 cc-connect，因为它会先校验当前选择的本地 Agent。不要把原生模式和旧模式同时连接到同一个飞书应用。
 
 早期固定工作区配置升级到主人专属原生 `/dir` 时，停止服务并重新构建后执行一次 `./scripts/onboard-native.sh --upgrade-workspace-policy`。新安装无需执行。
 
@@ -100,7 +101,7 @@ Agent 可以检查依赖、构建、启动自动安装器和运行测试。你�
 - 同一 `DS` 由 Aily 串行派发、不同 `DS` 线程并行；
 - `/stop`、`/help`、`/version` 和工具权限确认；主人还可用原生 `/dir` 选择下一会话的目录；
 - 工具审批卡片和文字审批只允许 `approval_from` 中的主人操作，并禁用跨任务延续的“允许全部”；
-- 在主人当前选择的目录中运行 Codex CLI/App Server；安装参数只设置初始目录，不限制后续目录数量。
+- 在主人当前选择的目录中运行所选 Agent；安装参数只设置初始目录，不限制后续目录数量。
 
 仍由 Aily 或后续策略补丁负责：
 
@@ -113,7 +114,7 @@ Agent 可以检查依赖、构建、启动自动安装器和运行测试。你�
 
 ## 费用
 
-飞书消息和本地 cc-connect 本身没有按消息的软件费。Aily 处理轻任务可能消耗 Aily 额度；Aily 转交本地任务时，Aily 和 Codex 都可能产生用量；直接发给本地机器人则会使用 Codex。实际账单以各平台账号和当时的产品条款为准。
+飞书消息和本地 cc-connect 本身没有按消息的软件费。Aily 处理轻任务可能消耗 Aily 额度；Aily 转交本地任务时，Aily 和所选本地 Agent 都可能产生用量；直接发给本地机器人则会使用所选本地 Agent。实际账单以各平台账号和当时的产品条款为准。
 
 ## 文档
 

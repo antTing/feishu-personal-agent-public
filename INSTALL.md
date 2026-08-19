@@ -8,10 +8,10 @@
 - Node.js 22+、npm；
 - Go 1.25+（用于构建固定版本 cc-connect）；
 - `curl`、`tar`、`shasum` 或 `sha256sum`；
-- Codex CLI，或带有可复用内置执行器的 ChatGPT/Codex 桌面应用，并完成登录；
+- 至少一个已安装并登录的执行器：Codex CLI、Claude Code 或 Cursor Agent CLI；
 - 一个可以创建企业自建应用的飞书账号。应用、机器人、权限、事件和身份值由安装器自动处理。
 
-启动脚本会优先使用当前 `PATH` 中的 `codex`；macOS 找不到时，会自动尝试复用 ChatGPT/Codex 桌面应用内置的执行器，不要求重复安装。仍找不到或版本不支持 `app-server` 时，再按[官方文档](https://developers.openai.com/codex/cli)安装或更新 Codex CLI。不要把 API Key 写入仓库、Agent 提示词或飞书消息。
+安装时通过 `--agent-type` 选择执行器：`codex`（默认）、`claude` 或 `cursor`。它们使用 cc-connect 原生适配：分别对应 `type = "codex"`、`type = "claudecode"` 和 `type = "acp"`（`agent acp`）。Codex 模式会优先使用 `PATH`，macOS 找不到时自动发现 ChatGPT/Codex 桌面应用内置执行器；Claude/Cursor 模式要求对应 CLI 已在 `PATH` 且完成登录。不要把 API Key 写入仓库、Agent 提示词或飞书消息。
 
 ## 2. 获取源码和构建本机 cc-connect
 
@@ -38,10 +38,10 @@ npm ci --prefix feishu-connector
 默认安装不要求你去开放平台查找或复制 App ID、App Secret、主人 `open_id`、群 `chat_id` 或 Aily 机器人 `open_id`。运行：
 
 ```bash
-./scripts/onboard-native.sh --initial-workspace '/绝对路径/到/初始目录'
+./scripts/onboard-native.sh --agent-type codex --initial-workspace '/绝对路径/到/初始目录'
 ```
 
-运行前会先验证本机存在支持 `app-server` 的 Codex 执行器，避免创建完飞书应用后才发现执行端不可用。安装器随后会按顺序完成：
+可将 `codex` 改为 `claude` 或 `cursor`。自动建飞书应用与具体执行器无关；启动阶段会校验所选 CLI 是否可用。安装器随后会按顺序完成：
 
 1. 打开飞书官方的一键建应用授权页；
 2. 复用飞书官方 `PersonalAgent` 基座，并增量声明消息权限、`im.message.receive_v1` 事件和 `card.action.trigger` 回调；
@@ -53,12 +53,12 @@ npm ci --prefix feishu-connector
 8. 只有主人确认后，安装器才写入严格的 `allow_from`、`allow_chat` 和 `approval_from`；
 9. 完成后删除临时配对状态和本机配对页面。
 
-配对阶段只监听明确 `@` 新机器人且包含完整一次性随机码的文本、富文本或卡片消息，不启动 Codex，也不会执行任何任务。只要最终配置尚未安装，中断或等待超时都可以重新运行同一命令继续配对；应用凭据已经写入本机私有状态后不会再次创建应用。若机器在飞书已创建应用、但本机尚未来得及保存凭据的极短窗口断电，可能留下一个未绑定应用；安装器不会擅自删除它，应由主人在飞书中确认后处理。若最终配置已经写入而清理状态时中断，下一次运行会校验并清理匹配的临时状态，不会覆盖配置或重复创建应用。
+配对阶段只监听明确 `@` 新机器人且包含完整一次性随机码的文本、富文本或卡片消息，不启动本机执行 Agent，也不会执行任何任务。只要最终配置尚未安装，中断或等待超时都可以重新运行同一命令继续配对；应用凭据已经写入本机私有状态后不会再次创建应用。若机器在飞书已创建应用、但本机尚未来得及保存凭据的极短窗口断电，可能留下一个未绑定应用；安装器不会擅自删除它，应由主人在飞书中确认后处理。若最终配置已经写入而清理状态时中断，下一次运行会校验并清理匹配的临时状态，不会覆盖配置或重复创建应用。
 
 不使用 Aily、只让主人直接使用时运行：
 
 ```bash
-./scripts/onboard-native.sh --without-dispatcher --initial-workspace '/绝对路径/到/初始目录'
+./scripts/onboard-native.sh --without-dispatcher --agent-type codex --initial-workspace '/绝对路径/到/初始目录'
 ```
 
 浏览器无法自动打开时，安装器会停止，避免把一次性值暴露给代装 Agent。本人可以在独立终端加 `--no-open --show-pairing-codes` 继续；这时终端会显示短时授权链接和配对码。它们只能按页面指引用于本次官方授权和指定执行群的配对消息，不得转发到其他会话、Issue 或日志中。
@@ -89,7 +89,7 @@ cc-connect 原生 `mode = "multi-workspace"` 及 `/workspace` 命令仍可由高
 
 看到 cc-connect 成功建立 Feishu WebSocket 后，在执行群中发送一个明确 `@` 本地机器人的只读任务。原生模式应能显示思考/工具进度，并能接收图片或文件。先不要让任务修改文件或运行生产命令。
 
-停止前台进程使用 `Ctrl-C`。当前 `v0.2` 只验证了这个前台入口，尚未提供适配本项目 Codex PATH 发现逻辑的一键 launchd/systemd 安装器。不要直接安装 cc-connect daemon，也不要把受管 Agent 会话中的 `nohup` 当作可靠服务托管。
+停止前台进程使用 `Ctrl-C`。当前版本只验证了这个前台入口，尚未提供适配各 Agent CLI 查找逻辑的一键 launchd/systemd 安装器。不要直接安装 cc-connect daemon，也不要把受管 Agent 会话中的 `nohup` 当作可靠服务托管。
 
 图片和文件会暂存在目标工作区的 `.cc-connect/`。如果目标工作区由版本控制管理，请由主人把 `.cc-connect/` 加入该项目自己的忽略规则；本项目的 `.gitignore` 不会影响外部工作区，安装器也不会擅自修改它。
 
@@ -113,7 +113,7 @@ Aily 只在任务确实需要本机能力时，在执行群中明确 `@` 本地�
 ```text
 请阅读 https://raw.githubusercontent.com/antTing/feishu-personal-agent-public/main/INSTALL.md，按原生 cc-connect 模式帮我安装。
 
-先完整阅读 INSTALL.md、SECURITY.md 和当前目录的 AGENTS.md，列出依赖、拟执行命令和拟修改文件。不要读取、打印、记录或提交任何密钥、Token、Cookie、飞书消息链接、一次性授权链接、配对码或完整个人路径。询问我初始工作目录以及是否使用 Aily，然后可以按默认参数启动 onboard-native.sh；初始目录不是唯一工作区。不要添加 --no-open、--show-pairing-codes 或 --recover-lock。浏览器授权、企业管理员审批、执行群配对、Aily 配对和主人最终确认由我在飞书界面完成。脚本生成私有状态和配置后，你只能检查文件存在和权限，不能读取正文。
+先完整阅读 INSTALL.md、SECURITY.md 和当前目录的 AGENTS.md，列出依赖、拟执行命令和拟修改文件。不要读取、打印、记录或提交任何密钥、Token、Cookie、飞书消息链接、一次性授权链接、配对码或完整个人路径。询问我要使用 codex、claude 还是 cursor，并询问初始工作目录以及是否使用 Aily，然后启动对应的 onboard-native.sh；初始目录不是唯一工作区。不要添加 --no-open、--show-pairing-codes 或 --recover-lock。浏览器授权、企业管理员审批、执行群配对、Aily 配对和主人最终确认由我在飞书界面完成。脚本生成私有状态和配置后，你只能检查文件存在和权限，不能读取正文。
 
 任何 Git 命令、系统软件安装、删除、覆盖配置、开机自启动或网络端口变更都先向我询问。完成后运行测试和 release-check；不要在受管终端中后台启动服务，最后提示我在本人普通终端运行 ./scripts/start-native.sh。
 ```

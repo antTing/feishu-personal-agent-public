@@ -3,7 +3,7 @@
 ## 费用链路
 
 ```text
-Aily（可选） -> 飞书企业自建应用 -> cc-connect -> Codex -> 模型/服务商
+Aily（可选） -> 飞书企业自建应用 -> cc-connect -> 所选本地 Agent -> 模型/服务商
 ```
 
 | 环节 | 消耗 | 承担方 |
@@ -11,10 +11,10 @@ Aily（可选） -> 飞书企业自建应用 -> cc-connect -> Codex -> 模型/�
 | 飞书企业自建应用 | 消息/OpenAPI 配额 | 飞书租户 |
 | Aily | 套餐或模型额度 | Aily 所属账户/租户 |
 | cc-connect | 本机 CPU、内存、网络 | 本机所有者 |
-| Codex | 账号或 API 模型用量 | Codex 账户所有者 |
+| 本地 Agent（Codex / Claude Code / Cursor） | 账号或 API 模型用量 | 对应 Agent 账户所有者 |
 | MCP/云服务 | 各自 API 和资源费 | 对应服务账户 |
 
-Aily 处理问候和飞书云端操作不会消耗 Codex；Aily 先总结再转交时，两边都可能产生模型用量。保持飞书 WebSocket 连接、执行停止命令或查看 Aily 自己维护的任务状态通常不产生新的 Codex 模型调用。
+Aily 处理问候和飞书云端操作不会消耗本地 Agent；Aily 先总结再转交时，两边都可能产生模型用量。保持飞书 WebSocket 连接、执行停止命令或查看 Aily 自己维护的任务状态通常不产生新的本地 Agent 模型调用。
 
 ## 工作区
 

@@ -19,7 +19,7 @@ import {
   registerNativeFeishuApp,
   waitForPairing
 } from "../feishu-connector/src/native-onboarding.js";
-import { renderNativeConfig } from "../native/config-template.mjs";
+import { normalizeAgentType, renderNativeConfig } from "../native/config-template.mjs";
 import {
   atomicPrivateWrite,
   nativeConfigMatchesPending,
@@ -55,10 +55,11 @@ for (const [signal, exitCode] of [["SIGINT", 130], ["SIGTERM", 143]]) {
 
 function usage() {
   console.log(`用法：
-  ./scripts/onboard-native.sh --initial-workspace /绝对路径/到/初始工作区
+  ./scripts/onboard-native.sh --agent-type codex --initial-workspace /绝对路径/到/初始工作区
 
 选项：
-  --initial-workspace     Codex 第一次会话的工作目录；主人之后可用 /dir 切换
+  --agent-type <类型>      选择 cc-connect 原生 Agent：codex（默认）、claude、cursor
+  --initial-workspace     所选 Agent 第一次会话的工作目录；主人之后可用 /dir 切换
   --workspace             --initial-workspace 的兼容别名
   --without-dispatcher     不配对 Aily，只允许主人直接使用
   --app-name <名称>        设置创建的飞书应用名称
@@ -77,6 +78,7 @@ App ID、App Secret、主人 ID、群 ID 和 Aily 机器人 ID 都会自动取�
 function parseArgs(argv) {
   const result = {
     workspace: process.env.INITIAL_WORKSPACE_PATH || process.env.WORKSPACE_PATH || "",
+    agentType: process.env.CC_AGENT_TYPE || process.env.AGENT_TYPE || "codex",
     requireDispatcher: true,
     appName: "本地个人 Agent",
     timeoutMs: 20 * 60_000,
@@ -93,10 +95,11 @@ function parseArgs(argv) {
     else if (arg === "--show-pairing-codes") result.showPairingCodes = true;
     else if (arg === "--recover-lock") result.recoverLock = true;
     else if (arg === "--upgrade-workspace-policy") result.upgradeWorkspacePolicy = true;
-    else if (["--initial-workspace", "--workspace", "--app-name", "--timeout-minutes"].includes(arg)) {
+    else if (["--agent-type", "--initial-workspace", "--workspace", "--app-name", "--timeout-minutes"].includes(arg)) {
       const value = argv[index + 1];
       if (!value) throw new Error(`${arg} requires a value`);
       index += 1;
+      if (arg === "--agent-type") result.agentType = value;
       if (arg === "--initial-workspace" || arg === "--workspace") result.workspace = value;
       if (arg === "--app-name") result.appName = value;
       if (arg === "--timeout-minutes") {
@@ -115,6 +118,7 @@ function parseArgs(argv) {
   if (!result.openBrowser && !result.showPairingCodes) {
     throw new Error("--no-open 必须与 --show-pairing-codes 一起使用，并且只限本人独立终端");
   }
+  result.agentType = normalizeAgentType(result.agentType).type;
   return result;
 }
 
@@ -237,7 +241,8 @@ async function loadPending() {
     !state.appId ||
     !state.appSecret ||
     !/^ou_[A-Za-z0-9]+$/.test(String(state.registrationOwnerId || "")) ||
-    !state.workspace
+    !state.workspace ||
+    !normalizeAgentType(state.agentType || "codex")
   ) {
     throw new Error("Private onboarding state is invalid");
   }
@@ -374,6 +379,9 @@ async function main() {
           throw new Error("The requested workspace does not match the pending onboarding session");
         }
       }
+      if (existingPending.agentType && existingPending.agentType !== options.agentType) {
+        throw new Error("The requested agent type does not match the pending onboarding session");
+      }
       const existingConfig = await readFile(CONFIG_PATH, "utf8");
       if (nativeConfigMatchesPending(existingConfig, existingPending)) {
         await unlink(PENDING_PATH);
@@ -396,13 +404,18 @@ async function main() {
         throw new Error("The requested workspace does not match the pending onboarding session");
       }
     }
+    if (pending.agentType && pending.agentType !== options.agentType) {
+      throw new Error("The requested agent type does not match the pending onboarding session");
+    }
     console.log("检测到未完成的私有配对状态，将继续上次安装。未读取或显示任何身份值。");
   } else {
     const workspace = await validateWorkspace(options.workspace);
+    const agent = normalizeAgentType(options.agentType);
     console.log("即将打开飞书官方授权页。请确认应用名称、机器人能力、权限、事件和卡片回调。");
     const registration = await registerNativeFeishuApp({
       requireDispatcher: options.requireDispatcher,
       appName: options.appName,
+      agentLabel: agent.label,
       onQRCodeReady: ({ url, expireIn }) => {
         const opened = openAuthorizationUrl(url, options.openBrowser);
         if (opened) {
@@ -425,6 +438,7 @@ async function main() {
       appSecret: registration.appSecret,
       registrationOwnerId: registration.registrationOwnerId,
       workspace,
+      agentType: options.agentType,
       requireDispatcher: options.requireDispatcher,
       ownerId: registration.registrationOwnerId,
       executionChatId: "",
@@ -477,7 +491,8 @@ async function main() {
     dispatcherId: identities.dispatcherId,
     executionChatId: identities.executionChatId,
     workspace: pending.workspace,
-    dataDir: DATA_DIR
+    dataDir: DATA_DIR,
+    agentType: pending.agentType || "codex"
   });
   await atomicPrivateWrite(CONFIG_PATH, config, { exclusive: true });
   await unlink(PENDING_PATH);

@@ -29,6 +29,7 @@ export function createPairingToken() {
 export function buildRegistrationOptions({
   requireDispatcher = true,
   appName = "本地个人 Agent",
+  agentLabel = "本地 Agent",
   onQRCodeReady,
   onStatusChange
 } = {}) {
@@ -41,7 +42,7 @@ export function buildRegistrationOptions({
     createOnly: true,
     appPreset: {
       name: appName,
-      desc: "通过飞书安全调用本机 cc-connect 和 Codex"
+      desc: `通过飞书安全调用本机 cc-connect 和${agentLabel}`
     },
     addons: {
       // Keep Feishu's PersonalAgent base so WebSocket event and card callback
@@ -59,6 +60,7 @@ export function buildRegistrationOptions({
 export async function registerNativeFeishuApp({
   requireDispatcher = true,
   appName,
+  agentLabel,
   onQRCodeReady,
   onStatusChange,
   registerApp = Lark.registerApp
@@ -66,6 +68,7 @@ export async function registerNativeFeishuApp({
   const result = await registerApp(buildRegistrationOptions({
     requireDispatcher,
     appName,
+    agentLabel,
     onQRCodeReady,
     onStatusChange
   }));

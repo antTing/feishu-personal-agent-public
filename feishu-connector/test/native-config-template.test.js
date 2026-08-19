@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  normalizeAgentType,
   renderNativeConfig,
   validateFeishuIdentityValues
 } from "../../native/config-template.mjs";
@@ -79,6 +80,48 @@ test("supports direct owner-only mode when no Aily dispatcher is configured", ()
 
   assert.ok(config.includes(`allow_from = ${JSON.stringify(OWNER_ID)}`));
   assert.equal(config.includes(`allow_from = ${JSON.stringify(`${OWNER_ID},`)}`), false);
+});
+
+test("renders Claude Code with cc-connect's native claudecode agent", () => {
+  const config = renderNativeConfig({
+    appId: APP_ID,
+    appSecret: "example-app-secret",
+    ownerId: OWNER_ID,
+    dispatcherId: "",
+    executionChatId: CHAT_ID,
+    workspace: "/absolute/example/workspace",
+    dataDir: "/absolute/example/private-data",
+    agentType: "claude"
+  });
+
+  assert.match(config, /type = "claudecode"/);
+  assert.match(config, /mode = "default"/);
+  assert.doesNotMatch(config, /app_server_url|backend = "app_server"/);
+});
+
+test("renders Cursor through cc-connect's native ACP adapter", () => {
+  const config = renderNativeConfig({
+    appId: APP_ID,
+    appSecret: "example-app-secret",
+    ownerId: OWNER_ID,
+    dispatcherId: "",
+    executionChatId: CHAT_ID,
+    workspace: "/absolute/example/workspace",
+    dataDir: "/absolute/example-private-data",
+    agentType: "cursor"
+  });
+
+  assert.match(config, /type = "acp"/);
+  assert.match(config, /cmd = "agent"/);
+  assert.match(config, /args = \["acp"\]/);
+  assert.match(config, /auth_method = "cursor_login"/);
+});
+
+test("normalizes supported agent aliases and rejects unknown types", () => {
+  assert.equal(normalizeAgentType("codex").type, "codex");
+  assert.equal(normalizeAgentType("claude-code").type, "claudecode");
+  assert.equal(normalizeAgentType("cursor-agent").type, "acp");
+  assert.throws(() => normalizeAgentType("unknown-agent"), /agent type/);
 });
 
 test("rejects wildcard, list and malformed Feishu identity values", () => {

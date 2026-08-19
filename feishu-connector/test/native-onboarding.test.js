@@ -63,6 +63,15 @@ test("one-click registration requests the native message permissions and callbac
   assert.deepEqual(options.addons.callbacks.items, ["card.action.trigger"]);
 });
 
+test("registration description follows the selected native agent", () => {
+  const options = buildRegistrationOptions({
+    requireDispatcher: false,
+    agentLabel: "Claude Code",
+    onQRCodeReady() {}
+  });
+  assert.match(options.appPreset.desc, /Claude Code/);
+});
+
 test("direct mode does not request bot-to-bot message access", () => {
   const options = buildRegistrationOptions({
     requireDispatcher: false,

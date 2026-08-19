@@ -50,11 +50,15 @@ function replaceKnownSensitiveValues(message, values) {
 
 export function nativeConfigMatchesPending(configText, pending) {
   if (typeof configText !== "string" || !pending || typeof pending !== "object") return false;
-  return [
+  const expected = [
     `app_id = ${tomlString(pending.appId)}`,
     `app_secret = ${tomlString(pending.appSecret)}`,
     `work_dir = ${tomlString(pending.workspace)}`
-  ].every((line) => configText.split("\n").includes(line));
+  ];
+  if (pending.agentType === "codex") expected.push('type = "codex"');
+  if (pending.agentType === "claudecode") expected.push('type = "claudecode"');
+  if (pending.agentType === "acp") expected.push('type = "acp"');
+  return expected.every((line) => configText.split("\n").includes(line));
 }
 
 export function upgradeNativeWorkspacePolicy(configText) {

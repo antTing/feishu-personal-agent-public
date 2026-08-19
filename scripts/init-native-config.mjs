@@ -7,7 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   renderNativeConfig,
-  validateFeishuIdentityValues
+  validateFeishuIdentityValues,
+  normalizeAgentType
 } from "../native/config-template.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +81,7 @@ const appSecret = required("FEISHU_APP_SECRET");
 const ownerId = required("FEISHU_OWNER_OPEN_ID");
 const dispatcherId = optional("FEISHU_DISPATCH_BOT_OPEN_ID");
 const executionChatId = required("FEISHU_EXECUTION_CHAT_ID");
+const agentType = normalizeAgentType(optional("CC_AGENT_TYPE") || optional("AGENT_TYPE") || "codex").type;
 validateFeishuIdentityValues({ appId, ownerId, dispatcherId, executionChatId });
 const initialWorkspaceValue = optional("INITIAL_WORKSPACE_PATH") || optional("WORKSPACE_PATH");
 if (!initialWorkspaceValue) {
@@ -121,7 +123,8 @@ const config = renderNativeConfig({
   dispatcherId,
   executionChatId,
   workspace,
-  dataDir
+  dataDir,
+  agentType
 });
 
 await privateFile(configPath, config);
